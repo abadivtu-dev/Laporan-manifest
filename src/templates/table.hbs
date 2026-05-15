@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 13px;
+    color: #333;
+    background: #fff;
+    padding: 16px;
+  }
+  .report-container {
+    max-width: 1100px;
+    margin: 0 auto;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  }
+  .header {
+    background: linear-gradient(135deg, #1a73e8, #0d47a1);
+    color: #fff;
+    padding: 16px 20px;
+  }
+  .header h1 {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .header .meta {
+    font-size: 12px;
+    opacity: 0.9;
+    line-height: 1.5;
+  }
+  .header .meta span {
+    margin-right: 16px;
+  }
+  .page-label {
+    text-align: right;
+    font-size: 11px;
+    color: #666;
+    padding: 6px 20px 0;
+    background: #f8f9fa;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+  }
+  th {
+    background: #1a73e8;
+    color: #fff;
+    font-weight: 600;
+    font-size: 12px;
+    text-align: left;
+    padding: 10px 8px;
+    white-space: nowrap;
+  }
+  td {
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+    font-size: 13px;
+  }
+  tr:nth-child(even) td {
+    background: #f8f9fa;
+  }
+  tr:hover td {
+    background: #e8f0fe;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge-done {
+    background: #e6f4ea;
+    color: #137333;
+  }
+  .badge-notyet {
+    background: #fef7e0;
+    color: #b06000;
+  }
+  .badge-other {
+    background: #fce8e6;
+    color: #c5221f;
+  }
+  .text-right {
+    text-align: right;
+  }
+  .text-center {
+    text-align: center;
+  }
+  .currency {
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .footer {
+    background: #f8f9fa;
+    padding: 10px 20px;
+    font-size: 12px;
+    color: #555;
+    border-top: 1px solid #e0e0e0;
+    display: flex;
+    justify-content: space-between;
+  }
+  .no-data {
+    text-align: center;
+    padding: 24px;
+    color: #999;
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+<div class="report-container">
+  <div class="header">
+    <h1>{{namaPaket}}</h1>
+    <div class="meta">
+      <span>📅 {{tanggal}}</span>
+      <span>✈️ {{maskapai}} {{#if rute}}| {{rute}}{{/if}}</span>
+      <span>📋 {{kodePaket}}</span>
+    </div>
+  </div>
+
+  {{#if pageLabel}}
+  <div class="page-label">{{pageLabel}}</div>
+  {{/if}}
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:40px;text-align:center">NO</th>
+        <th>NAMA</th>
+        <th style="width:120px">STATUS PASPOR</th>
+        <th style="width:60px;text-align:center">KAMAR</th>
+        <th style="width:160px;text-align:right">TOTAL PEMBAYARAN</th>
+        <th style="width:140px;text-align:right">KURANG BAYAR</th>
+        <th style="width:100px">NO MANIFEST</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#if rows.length}}
+        {{#each rows}}
+        <tr>
+          <td class="text-center">{{no}}</td>
+          <td>{{nama}}</td>
+          <td>{{{statusBadge}}}</td>
+          <td class="text-center">{{kamar}}</td>
+          <td class="text-right"><span class="currency">{{totalPembayaran}}</span></td>
+          <td class="text-right"><span class="currency">{{kurangBayar}}</span></td>
+          <td>{{noManifest}}</td>
+        </tr>
+        {{/each}}
+      {{else}}
+        <tr><td colspan="7" class="no-data">Belum ada data jamaah</td></tr>
+      {{/if}}
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <span>Total Jamaah: {{totalJamaah}}</span>
+    <span>{{timestamp}}</span>
+  </div>
+</div>
+</body>
+</html>
