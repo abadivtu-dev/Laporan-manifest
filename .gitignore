@@ -1,0 +1,12 @@
+node_modules/
+.env
+auth_info/
+data/
+*.sqlite
+*.db
+dist/
+.cache/
+playwright-report/
+test-results/
+screenshots-debug/
+*.log
