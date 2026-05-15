@@ -14,5 +14,11 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "Sistem Laporan WA Otomatis Manifest Jamaah Umroh"
+  "description": "Sistem Laporan WA Otomatis Manifest Jamaah Umroh",
+  "dependencies": {
+    "@vitest/ui": "^4.1.6",
+    "handlebars": "^4.7.9",
+    "playwright": "^1.60.0",
+    "vitest": "^4.1.6"
+  }
 }
