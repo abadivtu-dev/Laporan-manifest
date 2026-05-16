@@ -115,9 +115,9 @@ async function previewReports() {
           maxSeat: paket.totalSeat,
           sisaSeat: paket.sisaSeat,
         },
-        newJamaahList: cross.jamaahBaru.map((j) => j.NAMA),
-        pindahanList: cross.jamaahPindahan.map((j) => ({ nama: j.NAMA, dariPaket: j.paketAsal || 'paket lain' })),
-        keluarList: diff.removedJamaah.map((j) => j.NAMA),
+        newJamaahList: cross.jamaahBaru.map((j) => j.nama),
+        pindahanList: cross.jamaahPindahan.map((j) => ({ nama: j.nama, dariPaket: j.paketAsal || 'paket lain' })),
+        keluarList: diff.removedJamaah.map((j) => j.nama),
         isFirstRun: diff.isFirstRun,
         lastSnapshotDate: yesterday?.snapshot_date || null,
       };

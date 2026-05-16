@@ -1,21 +1,20 @@
-import { google } from 'googleapis';
+import googleapis from 'googleapis';
 import { logger } from '../utils/logger.js';
 
-/** @type {import('googleapis').sheets_v4.Sheets | null} */
+const { google } = googleapis;
+
 let sheets = null;
 
-/**
- * Initialize the Google Sheets client (idempotent — safe to call multiple times).
- * Uses GOOGLE_APPLICATION_CREDENTIALS env var implicitly via GoogleAuth.
- */
 async function _initClient() {
   if (sheets) return;
 
   const auth = new google.auth.GoogleAuth({
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS || './service-account.json',
   });
 
-  sheets = google.sheets({ version: 'v4', auth });
+  const client = await auth.getClient();
+  sheets = google.sheets({ version: 'v4', auth: client });
   logger.info('[sheets] client initialized');
 }
 

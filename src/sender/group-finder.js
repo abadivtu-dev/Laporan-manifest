@@ -7,7 +7,7 @@ export async function findGroup(sock, groupJid, groupName) {
   // Strategy 1: Direct JID match
   if (groupJid && groups[groupJid]) {
     logger.info('[wa] found group by JID', { jid: groupJid, name: groups[groupJid].subject });
-    return groups[groupJid];
+    return groups[groupJid].id;
   }
 
   // Strategy 2: Exact name match
@@ -15,7 +15,7 @@ export async function findGroup(sock, groupJid, groupName) {
     const exactMatch = groupList.find((g) => g.subject === groupName);
     if (exactMatch) {
       logger.info('[wa] found group by exact name', { name: groupName });
-      return exactMatch;
+      return exactMatch.id;
     }
 
     // Strategy 3: Case-insensitive contains match
@@ -23,7 +23,7 @@ export async function findGroup(sock, groupJid, groupName) {
     const containsMatch = groupList.find((g) => g.subject.toLowerCase().includes(lowerName));
     if (containsMatch) {
       logger.info('[wa] found group by partial name', { name: groupName, matched: containsMatch.subject });
-      return containsMatch;
+      return containsMatch.id;
     }
   }
 

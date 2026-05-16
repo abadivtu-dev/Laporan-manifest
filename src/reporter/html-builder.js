@@ -2,7 +2,7 @@ import Handlebars from 'handlebars';
 import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { formatCurrency, formatDateTime } from '../utils/formatters.js';
+import { formatDateTime } from '../utils/formatters.js';
 import { logger } from '../utils/logger.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -21,26 +21,23 @@ function _loadTemplate() {
 
 export class HtmlBuilder {
   /**
-   * Build complete report HTML string (concatenated if multi-page).
-   * @param {Object} packageData
-   * @param {Array} packageData.rows - Array of row objects
-   * @param {string} packageData.namaPaket
-   * @param {string} packageData.tanggal
-   * @param {string} packageData.maskapai
-   * @param {string} [packageData.rute]
-   * @param {string} packageData.kodePaket
-   * @param {number} packageData.totalJamaah
-   * @param {Date} [packageData.reportDate]
+   * Build complete report HTML string from paket block.
+   *
+   * @param {Object} opts
+   * @param {Object} opts.metadata — { kodePaket, namaPaket, rute, jumlahSeat, sisaSeat, tanggalKeberangkatan, maskapai, asal, tujuan }
+   * @param {Array<Object>} opts.jamaah — array of jamaah objects (columns F-Q fields)
+   * @param {Date} [opts.reportDate]
    * @returns {string} HTML string
    */
-  buildReportHtml(packageData) {
+  buildReportHtml({ metadata, jamaah, reportDate }) {
     try {
       const template = _loadTemplate();
-      const allRows = packageData.rows || [];
-      const pages = this._paginateRows(allRows, MAX_ROWS_PER_PAGE);
+      // Hanya tampilkan baris yang memiliki ID REG terisi
+      const filteredRows = this._filterValidRows(jamaah);
+      const pages = this._paginateRows(filteredRows, MAX_ROWS_PER_PAGE);
       const totalPages = pages.length;
-      const timestamp = packageData.reportDate
-        ? formatDateTime(packageData.reportDate)
+      const timestamp = reportDate
+        ? formatDateTime(reportDate)
         : formatDateTime(new Date());
 
       const pageHtmls = pages.map((pageRows, index) => {
@@ -49,22 +46,31 @@ export class HtmlBuilder {
           : null;
 
         const enrichedRows = pageRows.map((row) => ({
-          no: row.no,
+          noJamaah: row.noJamaah || '',
+          idRegister: row.idRegister || '',
+          nik: row.nik || '',
+          jenisIdentitas: row.jenisIdentitas || '',
           nama: row.nama || '',
-          kamar: row.kamar != null ? String(row.kamar) : '-',
-          totalPembayaran: formatCurrency(row.totalPembayaran),
-          kurangBayar: formatCurrency(row.kurangBayar),
-          noManifest: row.noManifest || '-',
           statusBadge: this._renderStatusBadge(row.statusPaspor),
+          keteranganPaspor: row.keteranganPaspor || '',
+          hotelMakkah: row.hotelMakkah || '',
+          hotelMadinah: row.hotelMadinah || '',
+          kamar: row.kamar || '',
+          totalPembayaran: row.totalPembayaran || '',
+          kurangBayar: row.kurangBayar || '',
         }));
 
         return template({
-          namaPaket: packageData.namaPaket || '',
-          tanggal: packageData.tanggal || '',
-          maskapai: packageData.maskapai || '',
-          rute: packageData.rute || '',
-          kodePaket: packageData.kodePaket || '',
-          totalJamaah: packageData.totalJamaah,
+          kodePaket: metadata.kodePaket || '',
+          namaPaket: metadata.namaPaket || '',
+          rute: metadata.rute || '',
+          jumlahSeat: metadata.jumlahSeat || 0,
+          sisaSeat: metadata.sisaSeat || 0,
+          tanggal: metadata.tanggalKeberangkatan || '',
+          maskapai: metadata.maskapai || '',
+          asal: metadata.asal || '',
+          tujuan: metadata.tujuan || '',
+          totalJamaah: filteredRows.length,
           pageLabel,
           rows: enrichedRows,
           timestamp,
@@ -79,10 +85,17 @@ export class HtmlBuilder {
   }
 
   /**
+   * Filter hanya baris yang memiliki ID REG valid (bukan kosong atau #N/A).
+   */
+  _filterValidRows(rows) {
+    return (rows || []).filter((row) => {
+      const idReg = (row.idRegister || '').trim();
+      return idReg && idReg !== '#N/A';
+    });
+  }
+
+  /**
    * Split rows into pages (chunks).
-   * @param {Array} rows
-   * @param {number} maxPerPage
-   * @returns {Array<Array>}
    */
   _paginateRows(rows, maxPerPage = MAX_ROWS_PER_PAGE) {
     if (!rows || rows.length === 0) return [[]];
@@ -95,8 +108,6 @@ export class HtmlBuilder {
 
   /**
    * Render status paspor as HTML badge.
-   * @param {string} status
-   * @returns {string} HTML badge string
    */
   _renderStatusBadge(status) {
     const label = (status || '').trim();

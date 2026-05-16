@@ -6,42 +6,38 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     font-family: 'Segoe UI', Arial, sans-serif;
-    font-size: 13px;
-    color: #333;
+    font-size: 11px;
+    color: #222;
     background: #fff;
-    padding: 16px;
+    padding: 8px;
   }
   .report-container {
-    max-width: 1100px;
+    max-width: 1200px;
     margin: 0 auto;
-    border-radius: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
     overflow: hidden;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
   }
-  .header {
-    background: linear-gradient(135deg, #1a73e8, #0d47a1);
-    color: #fff;
-    padding: 16px 20px;
-  }
-  .header h1 {
-    font-size: 16px;
-    font-weight: 700;
-    margin-bottom: 4px;
-  }
-  .header .meta {
-    font-size: 12px;
-    opacity: 0.9;
-    line-height: 1.5;
-  }
-  .header .meta span {
-    margin-right: 16px;
-  }
-  .page-label {
-    text-align: right;
+  .seat-info {
+    background: #e8f0fe;
+    padding: 8px 10px;
     font-size: 11px;
-    color: #666;
-    padding: 6px 20px 0;
-    background: #f8f9fa;
+    border-bottom: 1px solid #ccc;
+    line-height: 1.6;
+  }
+  .seat-info strong {
+    display: inline-block;
+    min-width: 80px;
+  }
+  .seat-info .tag {
+    display: inline-block;
+    background: #1a73e8;
+    color: #fff;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    margin-right: 4px;
   }
   table {
     width: 100%;
@@ -52,64 +48,67 @@
     background: #1a73e8;
     color: #fff;
     font-weight: 600;
-    font-size: 12px;
-    text-align: left;
-    padding: 10px 8px;
+    font-size: 10px;
+    text-align: center;
+    padding: 6px 4px;
+    white-space: nowrap;
+    border-right: 1px solid #1557b0;
+  }
+  th:last-child { border-right: none; }
+  td {
+    padding: 4px 5px;
+    border-bottom: 1px solid #e8e8e8;
+    border-right: 1px solid #eee;
+    font-size: 11px;
     white-space: nowrap;
   }
-  td {
-    padding: 8px;
-    border-bottom: 1px solid #eee;
-    font-size: 13px;
-  }
+  td:last-child { border-right: none; }
   tr:nth-child(even) td {
-    background: #f8f9fa;
+    background: #fafafa;
   }
-  tr:hover td {
-    background: #e8f0fe;
-  }
+  .text-right { text-align: right; }
+  .text-center { text-align: center; }
+  .col-no { width: 35px; text-align: center; }
+  .col-id { width: 55px; text-align: center; }
+  .col-nik { width: 130px; font-family: 'Consolas', monospace; font-size: 10px; }
+  .col-identitas { width: 70px; text-align: center; font-size: 10px; }
+  .col-nama { min-width: 150px; }
+  .col-status { width: 75px; text-align: center; }
+  .col-ket { width: 90px; font-size: 10px; }
+  .col-hotel { width: 100px; font-size: 10px; }
+  .col-kamar { width: 70px; text-align: center; font-size: 10px; }
+  .col-total { width: 110px; text-align: right; font-family: 'Consolas', monospace; font-size: 10px; }
+  .col-kurang { width: 100px; text-align: right; font-family: 'Consolas', monospace; font-size: 10px; }
   .badge {
     display: inline-block;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
     font-weight: 600;
   }
-  .badge-done {
-    background: #e6f4ea;
-    color: #137333;
-  }
-  .badge-notyet {
-    background: #fef7e0;
-    color: #b06000;
-  }
-  .badge-other {
-    background: #fce8e6;
-    color: #c5221f;
-  }
-  .text-right {
-    text-align: right;
-  }
-  .text-center {
-    text-align: center;
-  }
-  .currency {
-    font-family: 'Consolas', 'Courier New', monospace;
-    font-size: 12px;
-    white-space: nowrap;
-  }
+  .badge-done { background: #e6f4ea; color: #137333; }
+  .badge-notyet { background: #fef7e0; color: #b06000; }
+  .badge-other { background: #fce8e6; color: #c5221f; }
   .footer {
-    background: #f8f9fa;
-    padding: 10px 20px;
-    font-size: 12px;
+    background: #f1f3f4;
+    padding: 6px 10px;
+    font-size: 10px;
     color: #555;
-    border-top: 1px solid #e0e0e0;
+    border-top: 1px solid #ccc;
     display: flex;
     justify-content: space-between;
   }
+  .page-label {
+    text-align: center;
+    font-size: 10px;
+    color: #888;
+    padding: 4px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #ddd;
+  }
   .no-data {
     text-align: center;
-    padding: 24px;
+    padding: 16px;
     color: #999;
     font-style: italic;
   }
@@ -117,13 +116,20 @@
 </head>
 <body>
 <div class="report-container">
-  <div class="header">
-    <h1>{{namaPaket}}</h1>
-    <div class="meta">
-      <span>📅 {{tanggal}}</span>
-      <span>✈️ {{maskapai}} {{#if rute}}| {{rute}}{{/if}}</span>
-      <span>📋 {{kodePaket}}</span>
+  <div class="seat-info">
+    <div>
+      <strong>Kode Paket:</strong> <span class="tag">{{kodePaket}}</span>
+      <strong style="margin-left:16px">Paket:</strong> {{namaPaket}}
     </div>
+    <div>
+      <strong>Jml. Seat:</strong> {{jumlahSeat}}
+      <strong style="margin-left:12px">Sisa Seat:</strong> {{sisaSeat}}
+      <strong style="margin-left:16px">Tgl:</strong> {{tanggal}}
+      <strong style="margin-left:12px">Maskapai:</strong> {{maskapai}}{{#if asal}} | {{asal}} &rarr; {{tujuan}}{{/if}}
+    </div>
+    {{#if rute}}
+    <div style="font-size:10px;color:#555">{{rute}}</div>
+    {{/if}}
   </div>
 
   {{#if pageLabel}}
@@ -133,36 +139,46 @@
   <table>
     <thead>
       <tr>
-        <th style="width:40px;text-align:center">NO</th>
-        <th>NAMA</th>
-        <th style="width:120px">STATUS PASPOR</th>
-        <th style="width:60px;text-align:center">KAMAR</th>
-        <th style="width:160px;text-align:right">TOTAL PEMBAYARAN</th>
-        <th style="width:140px;text-align:right">KURANG BAYAR</th>
-        <th style="width:100px">NO MANIFEST</th>
+        <th class="col-no">NO</th>
+        <th class="col-id">ID REG</th>
+        <th class="col-nik">NIK</th>
+        <th class="col-identitas">IDENTITAS</th>
+        <th class="col-nama">NAMA</th>
+        <th class="col-status">STATUS PASPOR</th>
+        <th class="col-ket">KET PASPOR</th>
+        <th class="col-hotel">HOTEL MAKKAH</th>
+        <th class="col-hotel">HOTEL MADINAH</th>
+        <th class="col-kamar">KAMAR</th>
+        <th class="col-total">TOTAL BAYAR</th>
+        <th class="col-kurang">KURANG BAYAR</th>
       </tr>
     </thead>
     <tbody>
       {{#if rows.length}}
         {{#each rows}}
         <tr>
-          <td class="text-center">{{no}}</td>
-          <td>{{nama}}</td>
-          <td>{{{statusBadge}}}</td>
-          <td class="text-center">{{kamar}}</td>
-          <td class="text-right"><span class="currency">{{totalPembayaran}}</span></td>
-          <td class="text-right"><span class="currency">{{kurangBayar}}</span></td>
-          <td>{{noManifest}}</td>
+          <td class="col-no">{{noJamaah}}</td>
+          <td class="col-id">{{idRegister}}</td>
+          <td class="col-nik">{{nik}}</td>
+          <td class="col-identitas">{{jenisIdentitas}}</td>
+          <td class="col-nama">{{nama}}</td>
+          <td class="col-status">{{{statusBadge}}}</td>
+          <td class="col-ket">{{keteranganPaspor}}</td>
+          <td class="col-hotel">{{hotelMakkah}}</td>
+          <td class="col-hotel">{{hotelMadinah}}</td>
+          <td class="col-kamar">{{kamar}}</td>
+          <td class="col-total">{{totalPembayaran}}</td>
+          <td class="col-kurang">{{kurangBayar}}</td>
         </tr>
         {{/each}}
       {{else}}
-        <tr><td colspan="7" class="no-data">Belum ada data jamaah</td></tr>
+        <tr><td colspan="12" class="no-data">Belum ada data jamaah</td></tr>
       {{/if}}
     </tbody>
   </table>
 
   <div class="footer">
-    <span>Total Jamaah: {{totalJamaah}}</span>
+    <span>Total Jamaah: {{totalJamaah}} | Sisa Seat: {{sisaSeat}}</span>
     <span>{{timestamp}}</span>
   </div>
 </div>

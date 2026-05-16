@@ -18,7 +18,8 @@ export function crosscheckWithInvoice(newJamaah, invoiceMap, currentPackage) {
   const jamaahPindahan = [];
 
   for (const jamaah of newJamaah) {
-    const paketTerakhir = invoiceMap.get(jamaah.uniqueId);
+    const invoiceEntry = invoiceMap.get(jamaah.uniqueId);
+    const paketTerakhir = invoiceEntry?.paketTerakhir || '';
 
     if (paketTerakhir && paketTerakhir !== currentPackage) {
       jamaah.paketAsal = paketTerakhir;

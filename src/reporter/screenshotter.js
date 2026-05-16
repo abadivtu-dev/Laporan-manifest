@@ -6,7 +6,6 @@ let _browserInstance = null;
 
 /**
  * Initialize a single Playwright Chromium browser instance (singleton).
- * @returns {Promise<import('playwright').Browser>}
  */
 export async function initBrowser() {
   if (_browserInstance) {
@@ -24,9 +23,6 @@ export async function initBrowser() {
 
 /**
  * Render HTML content and capture screenshot of .report-container.
- * @param {import('playwright').Page} page
- * @param {string} html - Full HTML string
- * @returns {Promise<Buffer>} Screenshot buffer
  */
 export async function captureScreenshot(page, html) {
   try {
@@ -45,7 +41,6 @@ export async function captureScreenshot(page, html) {
 
 /**
  * Close browser instance if it exists.
- * @param {import('playwright').Browser} browser
  */
 export async function closeBrowser(browser) {
   if (!browser) return;
@@ -62,18 +57,17 @@ export async function closeBrowser(browser) {
 
 /**
  * High-level: build HTML + capture single screenshot.
- * @param {Object} packageData
- * @param {Date} reportDate
+ * @param {Object} data — { metadata, jamaah, reportDate }
  * @returns {Promise<Buffer>}
  */
-export async function renderScreenshot(packageData, reportDate) {
+export async function renderScreenshot(data) {
   try {
     const builder = new HtmlBuilder();
-    const html = builder.buildReportHtml({ ...packageData, reportDate });
+    const html = builder.buildReportHtml(data);
     const browser = await initBrowser();
     const context = await browser.newContext({
       deviceScaleFactor: 2,
-      viewport: { width: 1100, height: 1 },
+      viewport: { width: 1300, height: 1 },
     });
     const page = await context.newPage();
     try {
@@ -90,20 +84,23 @@ export async function renderScreenshot(packageData, reportDate) {
 
 /**
  * Render multiple screenshots for multi-page reports.
- * @param {Object} packageData
+ * @param {Object} paket — paket block with { metadata, jamaah }
  * @param {Date} reportDate
  * @returns {Promise<Buffer[]>} Array of screenshot buffers
  */
-export async function renderMultiPageScreenshots(packageData, reportDate) {
+export async function renderMultiPageScreenshots(paket, reportDate) {
   try {
-    const dataWithDate = { ...packageData, reportDate };
+    const data = {
+      metadata: paket.metadata,
+      jamaah: paket.jamaah || [],
+      reportDate,
+    };
     const builder = new HtmlBuilder();
-    const html = builder.buildReportHtml(dataWithDate);
-    const allRows = packageData.rows || [];
-    const pages = builder._paginateRows(allRows);
+    const validRows = builder._filterValidRows(data.jamaah);
+    const pages = builder._paginateRows(validRows);
 
     if (pages.length <= 1) {
-      const buffer = await renderScreenshot(packageData, reportDate);
+      const buffer = await renderScreenshot({ ...data, jamaah: validRows });
       return [buffer];
     }
 
@@ -112,13 +109,13 @@ export async function renderMultiPageScreenshots(packageData, reportDate) {
 
     for (let i = 0; i < pages.length; i++) {
       const pageData = {
-        ...dataWithDate,
-        rows: pages[i],
+        ...data,
+        jamaah: pages[i],
       };
       const pageHtml = builder.buildReportHtml(pageData);
       const context = await browser.newContext({
         deviceScaleFactor: 2,
-        viewport: { width: 1100, height: 1 },
+        viewport: { width: 1300, height: 1 },
       });
       const page = await context.newPage();
       try {

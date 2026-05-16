@@ -19,12 +19,12 @@ export async function processPaket({
   spreadsheetRunId,
 }) {
   const paketCode = paket.kodePaket;
-  const paketRunId = logPaketRun({ spreadsheetRunId, paketCode, sortOrder: 0 });
+  const paketRun = await logPaketRun({ spreadsheetRunId, paketCode, sortOrder: 0 });
 
   try {
     logger.info(`[paket] processing: ${paketCode} (${paket.jamaah.length} jamaah)`);
 
-    const yesterdaySnapshot = getPreviousSnapshot(spreadsheetId, paketCode, reportDate);
+    const yesterdaySnapshot = await getPreviousSnapshot(spreadsheetId, paketCode, reportDate);
     const yesterdayData = yesterdaySnapshot ? JSON.parse(yesterdaySnapshot.data_json) : null;
 
     const diffResult = detectNewJamaah(yesterdayData, paket.jamaah);
@@ -49,12 +49,12 @@ export async function processPaket({
         maxSeat: paket.totalSeat,
         sisaSeat: paket.sisaSeat,
       },
-      newJamaahList: crossResult.jamaahBaru.map((j) => j.NAMA),
+      newJamaahList: crossResult.jamaahBaru.map((j) => j.nama),
       pindahanList: crossResult.jamaahPindahan.map((j) => ({
-        nama: j.NAMA,
+        nama: j.nama,
         dariPaket: j.paketAsal || 'paket lain',
       })),
-      keluarList: diffResult.removedJamaah.map((j) => j.NAMA),
+      keluarList: diffResult.removedJamaah.map((j) => j.nama),
       isFirstRun: diffResult.isFirstRun,
       lastSnapshotDate: yesterdaySnapshot?.snapshot_date || null,
     };
@@ -68,14 +68,14 @@ export async function processPaket({
       { maxAttempts: config.retry.maxWaSendRetry, baseDelayMs: 5000, context: `paket=${paketCode}` }
     );
 
-    saveSnapshot({
+    await saveSnapshot({
       spreadsheetId,
       paketCode,
       snapshotDate: reportDate,
       jamaahData: paket.jamaah,
     });
 
-    logSentReport({
+    await logSentReport({
       spreadsheetId,
       paketCode,
       reportDate,
@@ -83,15 +83,15 @@ export async function processPaket({
       status: msgResult.success ? 'sent' : 'failed',
     });
 
-    updatePaketRunStatus(paketRunId, 'completed', null);
+    await updatePaketRunStatus(paketRun.id, 'completed', null);
 
     const totalBaru = crossResult.jamaahBaru.length + crossResult.jamaahPindahan.length;
     logger.info(`[paket] ${paketCode}: ${totalBaru} new (${crossResult.jamaahBaru.length} murni, ${crossResult.jamaahPindahan.length} pindahan), sent=${msgResult.success}`);
 
-    return { paketCode, success: msgResult.success, paketRunId };
+    return { paketCode, success: msgResult.success, paketRunId: paketRun.id };
   } catch (error) {
     logger.error(`[paket] ${paketCode} failed: ${error.message}`);
-    updatePaketRunStatus(paketRunId, 'failed', error.message);
+    await updatePaketRunStatus(paketRun.id, 'failed', error.message);
     throw error;
   }
 }

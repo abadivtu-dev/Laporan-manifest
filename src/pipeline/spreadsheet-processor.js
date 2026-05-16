@@ -15,7 +15,7 @@ export async function processSpreadsheet({
   config,
   pipelineRunId,
 }) {
-  const sheetRun = logSpreadsheetRun({ pipelineRunId, spreadsheetId, sortOrder });
+  const sheetRun = await logSpreadsheetRun({ pipelineRunId, spreadsheetId, sortOrder });
 
   try {
     logger.info(`[spreadsheet] fetching: ${spreadsheetId}`);
@@ -39,12 +39,12 @@ export async function processSpreadsheet({
       });
     }
 
-    updateSpreadsheetRunStatus(sheetRun.id, 'completed', null);
+    await updateSpreadsheetRunStatus(sheetRun.id, 'completed', null);
     logger.info(`[spreadsheet] ${spreadsheetId}: all ${manifest.pakets.length} pakets done`);
     return { spreadsheetId, success: true };
   } catch (error) {
     logger.error(`[spreadsheet] ${spreadsheetId} failed: ${error.message}`);
-    updateSpreadsheetRunStatus(sheetRun.id, 'failed', error.message);
+    await updateSpreadsheetRunStatus(sheetRun.id, 'failed', error.message);
     throw error;
   }
 }

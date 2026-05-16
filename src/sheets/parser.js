@@ -10,19 +10,19 @@
 /* ------------------------------------------------------------------ */
 
 const COLUMN_FIELD_MAP = {
-  'PROSES/CANCEL/PINDAH': 'proses',
-  PROSES: 'proses',
+  'PROSES CANCEL / PINDAH': 'proses',
+  'PROSES': 'proses',
   'KELUARGA/ROMBONGAN': 'keluarga',
   'NO JAMAAH': 'noJamaah',
   'ID REGISTER': 'idRegister',
-  NIK: 'nik',
+  'NIK': 'nik',
   'JENIS IDENTITAS': 'jenisIdentitas',
-  NAMA: 'nama',
+  'NAMA': 'nama',
   'STATUS PASPOR': 'statusPaspor',
   'KETERANGAN PASPOR': 'keteranganPaspor',
   'HOTEL MAKKAH': 'hotelMakkah',
   'HOTEL MADINAH': 'hotelMadinah',
-  KAMAR: 'kamar',
+  'KAMAR': 'kamar',
   'TOTAL PEMBAYARAN': 'totalPembayaran',
   'KURANG BAYAR': 'kurangBayar',
   'JENIS KELAMIN': 'jenisKelamin',
@@ -31,15 +31,15 @@ const COLUMN_FIELD_MAP = {
   'STATUS MENIKAH': 'statusMenikah',
   'NO TELP/HP': 'noTelp',
   'REQUEST WAITING LIST': 'requestWaitingList',
-  PEKERJAAN: 'pekerjaan',
+  'PEKERJAAN': 'pekerjaan',
   'PENDIDIKAN TERAKHIR': 'pendidikanTerakhir',
   'NO PASPOR': 'noPaspor',
   'NAMA PASPOR': 'namaPaspor',
   'TGL DIKELUARKAN': 'tglDikeluarkan',
   'TGL HABIS': 'tglHabis',
   'KOTA PASPOR': 'kotaPaspor',
-  HUB: 'hub',
-  ALAMAT: 'alamat',
+  'HUB': 'hub',
+  'ALAMAT': 'alamat',
   'NO MANIFEST': 'noManifest',
 };
 
@@ -49,8 +49,6 @@ const COLUMN_FIELD_MAP = {
 
 /**
  * Check if a row is empty (all cells blank/whitespace).
- * @param {Array<string>|null|undefined} row
- * @returns {boolean}
  */
 export function isEmptyRow(row) {
   if (!row || row.length === 0) return true;
@@ -58,34 +56,43 @@ export function isEmptyRow(row) {
 }
 
 /**
- * Detect column-header row — the first cell starts with "PROSES"
- * and second starts with "KELUARGA".
- * @param {Array<string>|null|undefined} row
- * @returns {boolean}
+ * Detect seat-info row — column G (index 6) contains "Jml. Seat".
+ */
+export function isSeatInfoRow(row) {
+  if (!row || row.length < 8) return false;
+  const g = (row[6] || '').toString().trim().toUpperCase();
+  return g.includes('JML') && g.includes('SEAT');
+}
+
+/**
+ * Detect column-header row — col D (3) starts with "PROSES",
+ * col E (4) starts with "KELUARGA", col F (5) starts with "NO".
  */
 export function isColumnHeaderRow(row) {
-  if (!row || row.length < 3) return false;
-  const c0 = (row[0] || '').toString().trim();
-  const c1 = (row[1] || '').toString().trim();
-  const c2 = (row[2] || '').toString().trim();
+  if (!row || row.length < 6) return false;
+  const c3 = (row[3] || '').toString().trim().toUpperCase();
+  const c4 = (row[4] || '').toString().trim().toUpperCase();
+  const c5 = (row[5] || '').toString().trim().toUpperCase();
   return (
-    (c0.startsWith('PROSES')) &&
-    c1.startsWith('KELUARGA') &&
-    c2.startsWith('NO')
+    c3.startsWith('PROSES') &&
+    c4.startsWith('KELUARGA') &&
+    c5.startsWith('NO')
   );
 }
 
 /**
- * Detect summary row — first cell contains "JUMLAH JAMAAH", "JUMLAH", or "TOTAL".
- * @param {Array<string>|null|undefined} row
- * @returns {boolean}
+ * Detect summary row — checks col A (index 0) and col F (index 5) for
+ * "JUMLAH JAMAAH", "JAMAAH PRIA", "JAMAAH WANITA", or "TOTAL".
  */
 export function isSummaryRow(row) {
   if (!row || row.length === 0) return false;
   const first = (row[0] || '').toString().trim().toUpperCase();
+  const colF = row.length > 5 ? (row[5] || '').toString().trim().toUpperCase() : '';
   return (
     first.startsWith('JUMLAH') ||
-    first.startsWith('TOTAL')
+    first.startsWith('TOTAL') ||
+    colF.startsWith('JUMLAH') ||
+    colF.startsWith('JAMAAH')
   );
 }
 
@@ -94,101 +101,112 @@ export function isSummaryRow(row) {
 /* ------------------------------------------------------------------ */
 
 /**
- * Parse a metadata row into a structured object.
+ * Parse seat-info row (fixed-position layout).
  *
- * Expected keys: KODE PAKET, PAKET, SEAT, SISA, TGL/TANGGAL, MASKAPAI, RUTE.
- *
- * @param {Array<string>|null} row
- * @returns {object}
+ * Col D (3): block number
+ * Col E (4): kode paket
+ * Col H (7): jumlah seat
+ * Col J (9): sisa seat
+ * Col K (10): tanggal keberangkatan (DD-Mon-YYYY)
+ * Col M (12): maskapai
+ * Col N (13): bandara asal
+ * Col O (14): bandara tujuan
  */
-export function parseMetaRow(row) {
+export function parseSeatInfoRow(row) {
   if (!row || isEmptyRow(row)) return {};
 
-  const meta = {};
+  const rawTanggal = (row[10] || '').toString().trim();
+  const rawJumlah = (row[7] || '').toString().trim();
+  const rawSisa = (row[9] || '').toString().trim();
 
-  for (const cell of row) {
-    if (!cell || !cell.includes(':')) continue;
+  return {
+    kodePaket: (row[4] || '').toString().trim(),
+    jumlahSeat: parseInt(rawJumlah, 10) || 0,
+    sisaSeat: parseInt(rawSisa, 10) || 0,
+    tanggalKeberangkatan: rawTanggal,
+    maskapai: (row[12] || '').toString().trim(),
+    asal: (row[13] || '').toString().trim(),
+    tujuan: (row[14] || '').toString().trim(),
+  };
+}
 
-    const sepIdx = cell.indexOf(':');
-    const key = cell.substring(0, sepIdx).trim().toUpperCase().replace(/\s+/g, ' ');
-    const value = cell.substring(sepIdx + 1).trim();
+/**
+ * Parse descriptive rows between seat-info and column-header.
+ * Extracts namaPaket from the "4A1" row (col F), rute from "3A1" row.
+ */
+export function parseDescriptionRows(descRows) {
+  let namaPaket = '';
+  let rute = '';
 
-    switch (key) {
-      case 'KODE PAKET':
-        meta.kodePaket = value;
-        break;
-      case 'PAKET':
-        meta.namaPaket = value;
-        break;
-      case 'SEAT':
-        meta.jumlahSeat = parseInt(value, 10) || 0;
-        break;
-      case 'SISA':
-        meta.sisaSeat = parseInt(value, 10) || 0;
-        break;
-      case 'TGL':
-      case 'TANGGAL':
-        meta.tanggalKeberangkatan = value;
-        break;
-      case 'MASKAPAI':
-        meta.maskapai = value;
-        break;
-      case 'RUTE':
-        meta.rute = value;
-        break;
+  for (const row of descRows) {
+    if (!row || isEmptyRow(row)) continue;
+    const marker = (row[2] || '').toString().trim().toUpperCase();
+    const textF = (row[6] || '').toString().trim();
+
+    if (marker.includes('4A')) {
+      namaPaket = textF || namaPaket;
+    } else if (marker.includes('3A')) {
+      rute = textF || rute;
+    } else if (!namaPaket && textF) {
+      namaPaket = textF;
     }
   }
 
-  return meta;
+  return { namaPaket, rute };
 }
 
 /**
  * Parse a summary row into { jumlahJamaah, jamaahPria, jamaahWanita }.
- * @param {Array<string>|null} row
- * @returns {object|null}
+ *
+ * Summary rows have the label in col F (index 5) and value in col J (index 9):
+ *   "JUMLAH JAMAAH" → jumlahJamaah
+ *   "JAMAAH PRIA"   → jamaahPria
+ *   "JAMAAH WANITA" → jamaahWanita
  */
 export function parseSummaryRow(row) {
   if (!row || isEmptyRow(row)) return null;
 
-  const summary = {};
+  const label = row.length > 5 ? (row[5] || '').toString().trim().toUpperCase() : '';
+  const rawValue = row.length > 9 ? (row[9] || '').toString().trim() : '0';
+  const value = parseInt(rawValue, 10) || 0;
 
-  for (const cell of row) {
-    if (!cell || !cell.includes(':')) continue;
-
-    const sepIdx = cell.indexOf(':');
-    const key = cell.substring(0, sepIdx).trim().toUpperCase().replace(/\s+/g, ' ');
-    const rawValue = cell.substring(sepIdx + 1).trim();
-    const value = parseInt(rawValue, 10) || 0;
-
-    if (key === 'JUMLAH JAMAAH' || key === 'JUMLAH' || key === 'TOTAL') {
-      summary.jumlahJamaah = value;
-    } else if (key === 'PRIA' || key === 'JAMAAH PRIA') {
-      summary.jamaahPria = value;
-    } else if (key === 'WANITA' || key === 'JAMAAH WANITA') {
-      summary.jamaahWanita = value;
-    }
+  if (label.startsWith('JUMLAH')) {
+    return { jumlahJamaah: value, jamaahPria: 0, jamaahWanita: 0 };
+  }
+  if (label.startsWith('JAMAAH PRIA') || label === 'PRIA') {
+    return { jumlahJamaah: 0, jamaahPria: value, jamaahWanita: 0 };
+  }
+  if (label.startsWith('JAMAAH WANITA') || label === 'WANITA') {
+    return { jumlahJamaah: 0, jamaahPria: 0, jamaahWanita: value };
   }
 
-  return summary;
+  return null;
+}
+
+/**
+ * Normalize a single header cell: remove newlines, (*) markers, extra spaces.
+ */
+function _normalizeHeader(raw) {
+  if (!raw) return '';
+  return raw
+    .replace(/\n/g, ' ')
+    .replace(/\(.*?\)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
  * Normalize column-header row into field-name array.
- * @param {Array<string>} headerRow
- * @returns {Array<string>}
  */
 function _normalizeHeaders(headerRow) {
   return (headerRow || []).map((h) => {
-    const trimmed = (h || '').toString().trim();
-    return COLUMN_FIELD_MAP[trimmed] || '';
+    const normalized = _normalizeHeader(h);
+    return COLUMN_FIELD_MAP[normalized] || '';
   });
 }
 
 /**
  * Parse a single data row using normalized column headers.
- * @param {Array<string>} row
- * @param {Array<string>} columnHeaders — normalized field names
- * @returns {object}
  */
 export function parseDataRow(row, columnHeaders) {
   const obj = {};
@@ -197,6 +215,7 @@ export function parseDataRow(row, columnHeaders) {
     if (!field) continue;
     obj[field] = (row[i] || '').toString().trim();
   }
+  obj.uniqueId = obj.idRegister || obj.nik || '';
   return obj;
 }
 
@@ -205,25 +224,67 @@ export function parseDataRow(row, columnHeaders) {
 /* ------------------------------------------------------------------ */
 
 /**
- * Extract one paket block starting at `headerIdx`.
+ * Extract one paket block starting at `seatInfoIdx`.
  *
- * @param {Array<Array<string>>} rows
- * @param {number} headerIdx — index of the column-header row
+ * Structure:
+ *   [seat info row]  ← seatInfoIdx
+ *   [optional: trip-date row, empty rows]
+ *   [description rows: nama paket, rute]
+ *   [column header row]
+ *   [data rows...]
+ *   [summary row or next seat-info row]
+ *
  * @returns {{ block: object, nextIndex: number }}
  */
-function _extractBlock(rows, headerIdx) {
-  const columnHeaders = _normalizeHeaders(rows[headerIdx]);
+function _extractBlock(rows, seatInfoIdx) {
+  // Parse seat info
+  const seatInfo = parseSeatInfoRow(rows[seatInfoIdx]);
 
-  // Find metadata row: scan backward from headerIdx, skip empty rows
-  let metaIdx = headerIdx - 1;
-  while (metaIdx >= 0 && isEmptyRow(rows[metaIdx])) {
-    metaIdx--;
+  // Scan forward: collect description rows until column header
+  let idx = seatInfoIdx + 1;
+  const descRows = [];
+
+  while (idx < rows.length) {
+    const row = rows[idx];
+    if (isColumnHeaderRow(row)) break;
+    if (isSeatInfoRow(row)) break; // malformed block, no header found
+    if (isEmptyRow(row)) {
+      idx++;
+      continue;
+    }
+    descRows.push(row);
+    idx++;
   }
-  const metadata = metaIdx >= 0 ? parseMetaRow(rows[metaIdx]) : {};
 
-  // Walk forward: collect data rows until summary or next header
-  let idx = headerIdx + 1;
+  // Parse description
+  const desc = parseDescriptionRows(descRows);
+
+  // If we hit another seat-info or EOF before column header, return what we have
+  if (idx >= rows.length || isSeatInfoRow(rows[idx])) {
+    return {
+      block: {
+        metadata: {
+          ...seatInfo,
+          ...desc,
+        },
+        columnHeaders: [],
+        jamaah: [],
+        summary: null,
+        seatInfoRow: rows[seatInfoIdx],
+        descRows,
+        rawRows: [],
+      },
+      nextIndex: idx,
+    };
+  }
+
+  // Parse column headers
+  const columnHeaders = _normalizeHeaders(rows[idx]);
+
+  // Walk forward: collect data rows until summary or next seat-info
+  idx++;
   const dataRows = [];
+  const rawRows = [];
 
   while (idx < rows.length) {
     const currentRow = rows[idx];
@@ -233,28 +294,89 @@ function _extractBlock(rows, headerIdx) {
       continue;
     }
 
-    if (isSummaryRow(currentRow)) {
-      const summary = parseSummaryRow(currentRow);
+    if (isSeatInfoRow(currentRow)) {
+      // Next block started
       return {
-        block: { metadata, columnHeaders, jamaah: dataRows, summary },
-        nextIndex: idx + 1,
+        block: {
+          metadata: { ...seatInfo, ...desc },
+          columnHeaders,
+          jamaah: dataRows,
+          summary: null,
+          seatInfoRow: rows[seatInfoIdx],
+          descRows,
+          rawRows,
+        },
+        nextIndex: idx,
+      };
+    }
+
+    if (isSummaryRow(currentRow)) {
+      // Collect all consecutive summary rows (JUMLAH JAMAAH, PRIA, WANITA)
+      const summary = parseSummaryRow(currentRow) || {};
+      idx++;
+      while (idx < rows.length) {
+        const nextRow = rows[idx];
+        if (isEmptyRow(nextRow)) {
+          idx++;
+          continue;
+        }
+        if (isSummaryRow(nextRow)) {
+          const nextSummary = parseSummaryRow(nextRow);
+          if (nextSummary) {
+            if (nextSummary.jumlahJamaah > 0) summary.jumlahJamaah = nextSummary.jumlahJamaah;
+            if (nextSummary.jamaahPria > 0) summary.jamaahPria = nextSummary.jamaahPria;
+            if (nextSummary.jamaahWanita > 0) summary.jamaahWanita = nextSummary.jamaahWanita;
+          }
+          idx++;
+          continue;
+        }
+        break;
+      }
+      return {
+        block: {
+          metadata: { ...seatInfo, ...desc },
+          columnHeaders,
+          jamaah: dataRows,
+          summary,
+          seatInfoRow: rows[seatInfoIdx],
+          descRows,
+          rawRows,
+        },
+        nextIndex: idx,
       };
     }
 
     if (isColumnHeaderRow(currentRow)) {
-      // Next block started — no summary found for this one
+      // Malformed — another header before summary/seat-info
       return {
-        block: { metadata, columnHeaders, jamaah: dataRows, summary: null },
+        block: {
+          metadata: { ...seatInfo, ...desc },
+          columnHeaders,
+          jamaah: dataRows,
+          summary: null,
+          seatInfoRow: rows[seatInfoIdx],
+          descRows,
+          rawRows,
+        },
         nextIndex: idx,
       };
     }
 
     dataRows.push(parseDataRow(currentRow, columnHeaders));
+    rawRows.push(currentRow);
     idx++;
   }
 
   return {
-    block: { metadata, columnHeaders, jamaah: dataRows, summary: null },
+    block: {
+      metadata: { ...seatInfo, ...desc },
+      columnHeaders,
+      jamaah: dataRows,
+      summary: null,
+      seatInfoRow: rows[seatInfoIdx],
+      descRows,
+      rawRows,
+    },
     nextIndex: idx,
   };
 }
@@ -266,6 +388,8 @@ function _extractBlock(rows, headerIdx) {
 /**
  * Parse raw DATA JAMAAH sheet data into an array of paket blocks.
  *
+ * Detection starts from "Jml. Seat" rows (seat-info row).
+ *
  * @param {Array<Array<string>>} rawRows — 2D array from Google Sheets API
  * @returns {Array<{metadata: object, columnHeaders: string[], jamaah: object[], summary: object|null}>}
  */
@@ -276,7 +400,7 @@ export function parseSheetData(rawRows) {
   let i = 0;
 
   while (i < rawRows.length) {
-    if (isColumnHeaderRow(rawRows[i])) {
+    if (isSeatInfoRow(rawRows[i])) {
       const { block, nextIndex } = _extractBlock(rawRows, i);
       blocks.push(block);
       i = nextIndex;

@@ -15,7 +15,7 @@ export async function runPipeline({ reportDate = todayDate() } = {}) {
     return { status: 'skipped', reason: 'already_running' };
   }
 
-  const pipeRun = logPipelineRun({ runDate: reportDate });
+  const pipeRun = await logPipelineRun({ runDate: reportDate });
 
   try {
     logger.info('[pipeline] initializing WA client...');

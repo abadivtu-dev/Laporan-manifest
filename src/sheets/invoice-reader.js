@@ -1,51 +1,42 @@
 /**
  * Invoice Reader — read INDUK DB TERKINI from the invoice spreadsheet
  * and build a lookup map for cross-checking jamaah perpindahan.
+ *
+ * Sheet structure (row 5 = header):
+ *   ID REG | NAMA JAMAAH | PAKET UMROH | JUMLAH JAMAAH | NO INVOICE | TGGL MSK MANIFEST
  */
 
-import { batchGetValues } from './client.js';
+import { getSheetValues } from './client.js';
 import { logger } from '../utils/logger.js';
 
-/* ------------------------------------------------------------------ */
-/*  Constants                                                          */
-/* ------------------------------------------------------------------ */
-
 const TAB_NAME = 'INDUK DB TERKINI';
-const RANGE = 'INDUK DB TERKINI!A1:H';
-
-/* ------------------------------------------------------------------ */
-/*  Public API                                                         */
-/* ------------------------------------------------------------------ */
+const RANGE = `'${TAB_NAME}'!A5:Z`;
 
 /**
- * Fetch invoice data and build a lookup map keyed by UNIQUE JAMAAH.
+ * Fetch invoice data and build a lookup map keyed by ID REG.
  *
- * The lookup map contains:
- *   { uniqueJamaah, namaLengkap, paketTransaksi, paketTerakhir }
- *
- * @param {string} spreadsheetId — Invoice spreadsheet ID
- * @returns {Promise<{lookupMap: Map<string, object>, rawData: Array<Array<string>>}>}
+ * @param {string} spreadsheetId
+ * @returns {Promise<Map<string, object>>}
  */
 export async function fetchInvoiceData(spreadsheetId) {
   try {
     logger.info({ spreadsheetId }, '[invoice-reader] fetching invoice data');
 
-    const [rows] = await batchGetValues(spreadsheetId, [RANGE]);
+    const rows = await getSheetValues(spreadsheetId, RANGE);
 
     if (!rows || rows.length < 1) {
-      throw new Error('Required columns not found — sheet is empty');
+      throw new Error('INDUK DB TERKINI is empty or headers not found');
     }
 
-    const headers = rows[0].map((h) => (h || '').toString().trim());
+    const headers = rows[0].map((h) => (h || '').toString().trim().toUpperCase());
 
-    const uniqueIdx = headers.indexOf('UNIQUE JAMAAH');
-    const namaIdx = headers.indexOf('NAMA LENGKAP');
-    const paketTransaksiIdx = headers.indexOf('PAKET TRANSAKSI');
-    const paketTerakhirIdx = headers.indexOf('PAKET TERAKHIR');
+    const idIdx = headers.indexOf('ID REG');
+    const namaIdx = headers.indexOf('NAMA JAMAAH');
+    const paketIdx = headers.indexOf('PAKET UMROH');
 
-    if (uniqueIdx === -1 || paketTerakhirIdx === -1) {
+    if (idIdx === -1) {
       throw new Error(
-        `Required columns not found in ${TAB_NAME}. Need "UNIQUE JAMAAH" and "PAKET TERAKHIR". Found: ${headers.join(', ')}`,
+        `Column "ID REG" not found in ${TAB_NAME}. Found: ${headers.join(', ')}`,
       );
     }
 
@@ -55,14 +46,14 @@ export async function fetchInvoiceData(spreadsheetId) {
       const row = rows[i];
       if (!row || row.every((c) => !c || c.toString().trim() === '')) continue;
 
-      const uniqueJamaah = (row[uniqueIdx] || '').toString().trim();
-      if (!uniqueJamaah) continue;
+      const idReg = (row[idIdx] || '').toString().trim();
+      if (!idReg) continue;
 
-      lookupMap.set(uniqueJamaah, {
-        uniqueJamaah,
+      // Simpan data terakhir per ID REG (kalau ada duplikat, ambil yang terakhir)
+      lookupMap.set(idReg, {
+        uniqueJamaah: idReg,
         namaLengkap: namaIdx !== -1 ? (row[namaIdx] || '').toString().trim() : '',
-        paketTransaksi: paketTransaksiIdx !== -1 ? (row[paketTransaksiIdx] || '').toString().trim() : '',
-        paketTerakhir: (row[paketTerakhirIdx] || '').toString().trim(),
+        paketTerakhir: paketIdx !== -1 ? (row[paketIdx] || '').toString().trim() : '',
       });
     }
 
@@ -71,10 +62,7 @@ export async function fetchInvoiceData(spreadsheetId) {
       '[invoice-reader] invoice lookup map built',
     );
 
-    return {
-      lookupMap,
-      rawData: rows,
-    };
+    return lookupMap;
   } catch (error) {
     logger.error({ err: error, spreadsheetId }, '[invoice-reader] fetchInvoiceData failed');
     throw new Error(
