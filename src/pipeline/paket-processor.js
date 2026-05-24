@@ -1,78 +1,139 @@
 import { getPreviousSnapshot, saveSnapshot } from '../storage/snapshot-store.js';
-import { logSentReport, logPaketRun, updatePaketRunStatus } from '../storage/report-log.js';
+import { isAlreadySent, logSentReport, logPaketRun, updatePaketRunStatus } from '../storage/report-log.js';
 import { detectNewJamaah } from '../comparator/engine.js';
-import { crosscheckWithInvoice } from '../comparator/crosscheck.js';
 import { renderMultiPageScreenshots } from '../reporter/screenshotter.js';
 import { CaptionBuilder } from '../reporter/caption-builder.js';
-import { retryWithBackoff } from '../utils/retry.js';
+import { sendToTelegram } from '../sender/telegram-sender.js';
+import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
+
+/**
+ * Classify and group jamaah using SEASON 2026 invoice data.
+ *
+ * BT column values: KWITANSI BARU → new, PEMBAYARAN / GANTI PAKET → pindahan, CANCEL → excluded.
+ * Grouping uses BV (JUMLAH ANGGOTA) and BW (NAMA pembawa) from invoice.
+ */
+function _classifyAndGroup(jamaahValid, seasonMap, currentPaketName) {
+  const jamaahBaru = [];
+  const jamaahPindahan = [];
+  const groupMap = new Map();
+
+  if (!seasonMap || seasonMap.size === 0) {
+    return { jamaahBaru, jamaahPindahan, newGroups: [], pindahanGroups: [] };
+  }
+
+  for (const j of jamaahValid) {
+    const seasonEntry = seasonMap.get(j.uniqueId);
+    if (!seasonEntry) continue;
+
+    const { statusInvoice, jumlahAnggota, namaPembawa, paketInvoice } = seasonEntry;
+    const leaderName = namaPembawa || j.nama;
+    const pax = jumlahAnggota || 1;
+
+    if (statusInvoice === 'KWITANSI BARU') {
+      jamaahBaru.push(j);
+      if (!groupMap.has(leaderName)) {
+        groupMap.set(leaderName, { leader: leaderName, pax, type: 'baru' });
+      }
+    } else if (statusInvoice === 'PEMBAYARAN' || statusInvoice === 'GANTI PAKET') {
+      if (paketInvoice && paketInvoice !== currentPaketName) {
+        jamaahPindahan.push(j);
+        if (!groupMap.has(leaderName)) {
+          groupMap.set(leaderName, {
+            leader: leaderName,
+            pax,
+            type: 'pindahan',
+            dariPaket: paketInvoice,
+          });
+        }
+      }
+    }
+  }
+
+  const newGroups = [...groupMap.values()]
+    .filter((g) => g.type === 'baru')
+    .map(({ leader, pax }) => ({ leader, pax }));
+  const pindahanGroups = [...groupMap.values()]
+    .filter((g) => g.type === 'pindahan')
+    .map(({ leader, pax, dariPaket }) => ({ leader, pax, dariPaket }));
+
+  return { jamaahBaru, jamaahPindahan, newGroups, pindahanGroups };
+}
 
 export async function processPaket({
   spreadsheetId,
   paket,
   invoiceMap,
+  seasonMap,
   reportDate,
-  messageQueue,
-  sock,
-  groupJid,
-  config,
   spreadsheetRunId,
 }) {
-  const paketCode = paket.kodePaket;
+  const meta = paket.metadata;
+  const paketCode = meta.kodePaket;
+
+  if (await isAlreadySent(spreadsheetId, paketCode, reportDate, 'sent')) {
+    logger.info(`[paket] ${paketCode}: already sent for ${reportDate}, skipping`);
+    return { paketCode, success: true, skipped: true };
+  }
+
   const paketRun = await logPaketRun({ spreadsheetRunId, paketCode, sortOrder: 0 });
 
   try {
-    logger.info(`[paket] processing: ${paketCode} (${paket.jamaah.length} jamaah)`);
+    const jamaahValid = paket.jamaah.filter((j) => {
+      const idReg = (j.idRegister || '').toString().trim();
+      if (!idReg) return false;
+      if (idReg.startsWith('#')) return false;        // #N/A, #ERROR!, #VALUE!, #REF!
+      if (idReg.toUpperCase() === 'N/A') return false; // N/A tanpa #
+      if (idReg === '-' || idReg === '--') return false;
+      return idReg.length >= 2;
+    });
+
+    logger.info(`[paket] processing: ${paketCode} (${jamaahValid.length}/${paket.jamaah.length} jamaah valid)`);
 
     const yesterdaySnapshot = await getPreviousSnapshot(spreadsheetId, paketCode, reportDate);
     const yesterdayData = yesterdaySnapshot ? JSON.parse(yesterdaySnapshot.data_json) : null;
+    const diffResult = detectNewJamaah(yesterdayData, jamaahValid);
 
-    const diffResult = detectNewJamaah(yesterdayData, paket.jamaah);
-
-    let crossResult = {
-      jamaahBaru: diffResult.newJamaah,
-      jamaahPindahan: [],
-    };
-    if (invoiceMap && diffResult.newCount > 0) {
-      crossResult = crosscheckWithInvoice(diffResult.newJamaah, invoiceMap, paket.namaPaket);
-    }
+    const { newGroups, pindahanGroups } = _classifyAndGroup(
+      jamaahValid,
+      seasonMap,
+      meta.namaPaket,
+    );
 
     const photos = await renderMultiPageScreenshots(paket, reportDate);
 
     const captionData = {
       packageData: {
-        namaPaket: paket.namaPaket,
-        tanggal: paket.tanggal,
-        maskapai: paket.maskapai,
-        rute: paket.rute,
-        totalJamaah: paket.jamaah.length,
-        maxSeat: paket.totalSeat,
-        sisaSeat: paket.sisaSeat,
+        namaPaket: meta.namaPaket,
+        tanggal: meta.tanggalKeberangkatan,
+        maskapai: meta.maskapai,
+        rute: meta.rute,
+        totalJamaah: jamaahValid.length,
+        maxSeat: meta.jumlahSeat,
+        sisaSeat: meta.sisaSeat,
       },
-      newJamaahList: crossResult.jamaahBaru.map((j) => j.nama),
-      pindahanList: crossResult.jamaahPindahan.map((j) => ({
-        nama: j.nama,
-        dariPaket: j.paketAsal || 'paket lain',
-      })),
+      newJamaahGroups: newGroups,
+      pindahanGroups,
+      newCount: newGroups.reduce((sum, g) => sum + g.pax, 0),
+      pindahanCount: pindahanGroups.reduce((sum, g) => sum + g.pax, 0),
       keluarList: diffResult.removedJamaah.map((j) => j.nama),
-      isFirstRun: diffResult.isFirstRun,
       lastSnapshotDate: yesterdaySnapshot?.snapshot_date || null,
     };
 
     const caption = new CaptionBuilder().build(captionData);
 
-    const msgResult = await retryWithBackoff(
-      async () => {
-        return await messageQueue.sendToGroup(sock, groupJid, photos[0], caption);
-      },
-      { maxAttempts: config.retry.maxWaSendRetry, baseDelayMs: 5000, context: `paket=${paketCode}` }
+    const msgResult = await sendToTelegram(
+      config.telegramChatId,
+      photos[0],
+      caption,
+      { maxAttempts: config.retry.maxTelegramRetry },
     );
 
     await saveSnapshot({
       spreadsheetId,
       paketCode,
       snapshotDate: reportDate,
-      jamaahData: paket.jamaah,
+      jamaahData: jamaahValid,
     });
 
     await logSentReport({
@@ -85,8 +146,8 @@ export async function processPaket({
 
     await updatePaketRunStatus(paketRun.id, 'completed', null);
 
-    const totalBaru = crossResult.jamaahBaru.length + crossResult.jamaahPindahan.length;
-    logger.info(`[paket] ${paketCode}: ${totalBaru} new (${crossResult.jamaahBaru.length} murni, ${crossResult.jamaahPindahan.length} pindahan), sent=${msgResult.success}`);
+    const totalBaru = newGroups.length + pindahanGroups.length;
+    logger.info(`[paket] ${paketCode}: ${totalBaru} groups baru, sent=${msgResult.success}`);
 
     return { paketCode, success: msgResult.success, paketRunId: paketRun.id };
   } catch (error) {

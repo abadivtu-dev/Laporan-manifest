@@ -5,11 +5,12 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
+    "now": "node src/index.js --run-now",
+    "config": "node src/admin-cli.js",
+    "status": "node src/cli.js status",
+    "preview": "node src/cli.js preview",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "pipeline:status": "node src/cli.js status",
-    "pipeline:resume": "node src/cli.js resume",
-    "pipeline:preview": "node src/cli.js preview"
+    "test:watch": "vitest"
   },
   "keywords": [],
   "author": "",

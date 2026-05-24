@@ -10,19 +10,18 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const required = [
   'SPREADSHEET_MONTHLY_IDS',
   'INVOICE_SPREADSHEET_ID',
-  'WA_GROUP_JID',
+  'TELEGRAM_CHAT_ID',
 ];
 
 const defaults = {
   TZ: 'Asia/Jakarta',
   REPORT_TIME: '21:00',
-  WA_MIN_DELAY_MS: '4000',
-  WA_MAX_DELAY_MS: '8000',
   MAX_SPREADSHEET_RETRY: '3',
   MAX_PAKET_RETRY: '3',
-  MAX_WA_SEND_RETRY: '3',
+  MAX_TELEGRAM_RETRY: '3',
   PIPELINE_TIMEOUT_MS: '1800000',
-  WA_GROUP_NAME: 'Laporan Manifest Umroh',
+  ADMIN_PORT: '3456',
+  TELEGRAM_BOT_TOKEN: '',
 };
 
 function loadConfig() {
@@ -42,19 +41,34 @@ function loadConfig() {
     reportTime: process.env.REPORT_TIME,
     spreadsheetIds: process.env.SPREADSHEET_MONTHLY_IDS.split(',').map((s) => s.trim()),
     invoiceSpreadsheetId: process.env.INVOICE_SPREADSHEET_ID,
-    wa: {
-      groupJid: process.env.WA_GROUP_JID,
-      groupName: process.env.WA_GROUP_NAME,
-      minDelayMs: parseInt(process.env.WA_MIN_DELAY_MS, 10),
-      maxDelayMs: parseInt(process.env.WA_MAX_DELAY_MS, 10),
-    },
+    telegramChatId: process.env.TELEGRAM_CHAT_ID,
     retry: {
       maxSpreadsheetRetry: parseInt(process.env.MAX_SPREADSHEET_RETRY, 10),
       maxPaketRetry: parseInt(process.env.MAX_PAKET_RETRY, 10),
-      maxWaSendRetry: parseInt(process.env.MAX_WA_SEND_RETRY, 10),
+      maxTelegramRetry: parseInt(process.env.MAX_TELEGRAM_RETRY, 10),
     },
     pipelineTimeoutMs: parseInt(process.env.PIPELINE_TIMEOUT_MS, 10),
+    adminPort: parseInt(process.env.ADMIN_PORT, 10),
+    telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
   };
 }
 
 export const config = loadConfig();
+
+/**
+ * Resolve spreadsheet IDs — database dulu, fallback ke .env.
+ * Harus dipanggil setelah database diinisialisasi.
+ * @returns {Promise<string[]>}
+ */
+export async function resolveSpreadsheetIds() {
+  try {
+    const { getSpreadsheetIds } = await import('../storage/spreadsheet-config.js');
+    const items = await getSpreadsheetIds();
+    if (items && items.length > 0) {
+      return items.map((entry) => entry.id);
+    }
+  } catch {
+    // DB not ready or error — fall through to env
+  }
+  return config.spreadsheetIds;
+}

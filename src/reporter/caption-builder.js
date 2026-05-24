@@ -16,7 +16,7 @@ export class CaptionBuilder {
    * @param {string[]} [data.newJamaahList] - Names of new jamaah
    * @param {Array<{nama: string, dariPaket: string}>} [data.pindahanList] - Moved jamaah
    * @param {string[]} [data.keluarList] - Names of jamaah who left
-   * @param {boolean} [data.isFirstRun] - First time running
+  
    * @param {string|null} [data.lastSnapshotDate] - Last snapshot date string
    * @param {Date} data.currentDate - Current date
    * @returns {string} Formatted caption
@@ -24,15 +24,16 @@ export class CaptionBuilder {
   build(data) {
     const {
       packageData,
-      newJamaahList = [],
-      pindahanList = [],
+      newJamaahGroups = [],
+      pindahanGroups = [],
+      newCount = 0,
+      pindahanCount = 0,
       keluarList = [],
-      isFirstRun = false,
       lastSnapshotDate = null,
     } = data;
 
-    const safeNew = Array.isArray(newJamaahList) ? newJamaahList : [];
-    const safePindah = Array.isArray(pindahanList) ? pindahanList : [];
+    const safeNewGroups = Array.isArray(newJamaahGroups) ? newJamaahGroups : [];
+    const safePindahGroups = Array.isArray(pindahanGroups) ? pindahanGroups : [];
     const safeKeluar = Array.isArray(keluarList) ? keluarList : [];
 
     const lines = [];
@@ -65,32 +66,28 @@ export class CaptionBuilder {
     const maxSeatStr = pd.maxSeat ? `/${pd.maxSeat} seat` : ' seat';
     lines.push(`👥 Total Jamaah: ${pd.totalJamaah}${maxSeatStr}`);
 
-    // "Jamaah Baru Hari Ini" count:
-    // - If there are genuinely new jamaah, count = new + pindahan (combined)
-    // - If only pindahan (no new), show "- (tidak ada)" — pindahan listed separately
-    // - If neither, show "- (tidak ada)"
-    const hasNew = safeNew.length > 0;
-    const hasPindah = safePindah.length > 0;
+    // "Jamaah Baru Hari Ini" — tampilkan per grup (leader + pax)
+    const hasNew = safeNewGroups.length > 0;
+    const hasPindah = safePindahGroups.length > 0;
 
-    if (hasNew) {
-      const totalNew = safeNew.length + safePindah.length;
+    if (hasNew || hasPindah) {
+      const totalNew = newCount + pindahanCount;
       lines.push(`🆕 Jamaah Baru Hari Ini: ${totalNew} orang`);
-      for (const nama of safeNew) {
-        lines.push(`  ❯ ${nama}`);
+      for (const g of safeNewGroups) {
+        lines.push(g.pax > 1 ? `  ❯ ${g.leader} + ${g.pax} pax` : `  ❯ ${g.leader}`);
       }
-      for (const p of safePindah) {
-        lines.push(`  ❯ ${p.nama}`);
+      for (const g of safePindahGroups) {
+        lines.push(g.pax > 1 ? `  ❯ ${g.leader} + ${g.pax} pax` : `  ❯ ${g.leader}`);
       }
-    } else {
-      lines.push('🆕 Jamaah Baru Hari Ini: - (tidak ada)');
     }
 
     // Perpindahan section (scenario 3 & 4)
-    if (safePindah.length > 0) {
+    if (hasPindah) {
       lines.push('');
       lines.push('🔄 Perpindahan Jamaah');
-      for (const p of safePindah) {
-        lines.push(`  ❯ ${p.nama} — dari ${p.dariPaket}`);
+      for (const g of safePindahGroups) {
+        const label = g.pax > 1 ? ` + ${g.pax} pax` : '';
+        lines.push(`  ❯ ${g.leader}${label} — dari ${g.dariPaket}`);
       }
     }
 
@@ -103,13 +100,7 @@ export class CaptionBuilder {
       }
     }
 
-    // First run note (scenario 5)
-    if (isFirstRun) {
-      lines.push('');
-      lines.push('📝 Pertama Kali — semua jamaah tercatat sebagai baru');
-    }
-
-    // Snapshot gap note (scenario 6)
+    // Snapshot gap note
     if (lastSnapshotDate) {
       const formatted = formatDate(lastSnapshotDate);
       lines.push('');

@@ -2,24 +2,35 @@ import { initDatabase } from './storage/database.js';
 import { config } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { startScheduler, stopScheduler, getSchedulerStatus } from './scheduler/cron.js';
+import { startAdminServer, stopAdminServer } from './admin/server.js';
+import { startTelegramBot, stopTelegramBot } from './telegram/bot.js';
+
+let adminServer = null;
 
 process.on('SIGTERM', () => {
   logger.info('[init] SIGTERM received, shutting down');
   stopScheduler();
+  stopAdminServer();
+  stopTelegramBot();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
   logger.info('[init] SIGINT received, shutting down');
   stopScheduler();
+  stopAdminServer();
+  stopTelegramBot();
   process.exit(0);
 });
 
 logger.info('[init] laporan-wa starting');
-logger.info({ config: { ...config, wa: '***' } }, '[init] configuration loaded');
+logger.info({ config: { ...config, telegramBotToken: '***' } }, '[init] configuration loaded');
 
 initDatabase();
 logger.info('[init] database ready');
+
+adminServer = startAdminServer(config.adminPort);
+startTelegramBot();
 
 const args = process.argv.slice(2);
 

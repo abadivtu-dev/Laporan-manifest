@@ -1,14 +1,18 @@
 import { getDatabase } from '../storage/database.js';
 import { logPipelineRun } from '../storage/report-log.js';
 import { processSpreadsheet } from './spreadsheet-processor.js';
-import { startBot, getSocket, isConnected } from '../sender/wa-client.js';
-import { findGroup } from '../sender/group-finder.js';
-import { MessageQueue } from '../sender/message-queue.js';
-import { config } from '../config/index.js';
+import { config, resolveSpreadsheetIds } from '../config/index.js';
+import { getSpreadsheetIds } from '../storage/spreadsheet-config.js';
+import { sendTextToTelegram } from '../sender/telegram-sender.js';
 import { logger } from '../utils/logger.js';
 
 export async function runPipeline({ reportDate = todayDate() } = {}) {
   logger.info(`[pipeline] starting for ${reportDate}`);
+
+  if (!config.telegramBotToken || !config.telegramChatId) {
+    logger.error('[pipeline] TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured');
+    return { status: 'failed', error: 'Telegram config missing' };
+  }
 
   if (!acquireLock(reportDate)) {
     logger.warn('[pipeline] already running, exiting');
@@ -18,36 +22,36 @@ export async function runPipeline({ reportDate = todayDate() } = {}) {
   const pipeRun = await logPipelineRun({ runDate: reportDate });
 
   try {
-    logger.info('[pipeline] initializing WA client...');
-    const sock = await startBot();
-    if (!isConnected(sock)) {
-      throw new Error('WA client failed to connect');
+    const sheetIds = await resolveSpreadsheetIds();
+    let configItems = [];
+    try {
+      configItems = await getSpreadsheetIds();
+    } catch {
+      // fallback: pakai ID saja
     }
 
-    const groupJid = await findGroup(sock, config.wa.groupJid, config.wa.groupName);
-    logger.info(`[pipeline] target group: ${groupJid}`);
-
-    const messageQueue = new MessageQueue({
-      minDelayMs: config.wa.minDelayMs,
-      maxDelayMs: config.wa.maxDelayMs,
-    });
+    const labelMap = new Map();
+    for (const item of configItems) {
+      labelMap.set(item.id, item.label || '');
+    }
 
     let spreadsheetsDone = 0;
-    let paketsFailed = 0;
 
-    for (let i = 0; i < config.spreadsheetIds.length; i++) {
-      const sheetId = config.spreadsheetIds[i];
+    for (let i = 0; i < sheetIds.length; i++) {
+      const sheetId = sheetIds[i];
 
       try {
+        const label = labelMap.get(sheetId) || `Spreadsheet ${i + 1}`;
+        await sendTextToTelegram(
+          config.telegramChatId,
+          `⭐ ⭐ ⭐ <b>${label}</b> ⭐ ⭐ ⭐`,
+        );
+
         await processSpreadsheet({
           spreadsheetId: sheetId,
           invoiceSpreadsheetId: config.invoiceSpreadsheetId,
           reportDate,
           sortOrder: i,
-          messageQueue,
-          sock,
-          groupJid,
-          config,
           pipelineRunId: pipeRun.id,
         });
         spreadsheetsDone++;
@@ -56,9 +60,7 @@ export async function runPipeline({ reportDate = todayDate() } = {}) {
       }
     }
 
-    const stats = messageQueue.getStats();
-    logger.info(`[pipeline] completed: ${spreadsheetsDone}/${config.spreadsheetIds.length} spreadsheets, ${stats.sent} WA msgs sent, ${stats.failed} failed`);
-
+    logger.info(`[pipeline] completed: ${spreadsheetsDone}/${sheetIds.length} spreadsheets`);
     completePipeline(pipeRun.id, 'completed');
     return { status: 'completed', spreadsheetsDone };
   } catch (error) {

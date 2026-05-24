@@ -84,7 +84,7 @@ async function resumePipeline() {
 }
 
 async function previewReports() {
-  const { config } = await import('./config/index.js');
+  const { config, resolveSpreadsheetIds } = await import('./config/index.js');
   const { fetchManifestData } = await import('./sheets/manifest-reader.js');
   const { fetchInvoiceData } = await import('./sheets/invoice-reader.js');
   const { getPreviousSnapshot } = await import('./storage/snapshot-store.js');
@@ -94,26 +94,28 @@ async function previewReports() {
 
   console.log(`=== PREVIEW for ${today} ===\n`);
 
-  for (const sheetId of config.spreadsheetIds) {
+  const sheetIds = await resolveSpreadsheetIds();
+  for (const sheetId of sheetIds) {
     console.log(`Spreadsheet: ${sheetId}`);
     const manifest = await fetchManifestData(sheetId);
     const invoiceMap = await fetchInvoiceData(config.invoiceSpreadsheetId);
 
-    for (const paket of manifest.pakets) {
-      const yesterday = getPreviousSnapshot(sheetId, paket.kodePaket, today);
+    for (const paket of manifest) {
+      const meta = paket.metadata;
+      const yesterday = getPreviousSnapshot(sheetId, meta.kodePaket, today);
       const yesterdayData = yesterday ? JSON.parse(yesterday.data_json) : null;
       const diff = detectNewJamaah(yesterdayData, paket.jamaah);
-      const cross = crosscheckWithInvoice(diff.newJamaah, invoiceMap, paket.namaPaket);
+      const cross = crosscheckWithInvoice(diff.newJamaah, invoiceMap, meta.namaPaket);
 
       const captionData = {
         packageData: {
-          namaPaket: paket.namaPaket,
-          tanggal: paket.tanggal,
-          maskapai: paket.maskapai,
-          rute: paket.rute,
+          namaPaket: meta.namaPaket,
+          tanggal: meta.tanggalKeberangkatan,
+          maskapai: meta.maskapai,
+          rute: meta.rute,
           totalJamaah: paket.jamaah.length,
-          maxSeat: paket.totalSeat,
-          sisaSeat: paket.sisaSeat,
+          maxSeat: meta.jumlahSeat,
+          sisaSeat: meta.sisaSeat,
         },
         newJamaahList: cross.jamaahBaru.map((j) => j.nama),
         pindahanList: cross.jamaahPindahan.map((j) => ({ nama: j.nama, dariPaket: j.paketAsal || 'paket lain' })),

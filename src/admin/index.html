@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Konfigurasi Spreadsheet Manifest</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+      line-height: 1.6;
+      padding: 20px;
+    }
+    .container { max-width: 860px; margin: 0 auto; }
+    h1 { font-size: 1.4em; margin-bottom: 20px; color: #222; }
+    h2 { font-size: 1.1em; margin-bottom: 10px; color: #444; }
+
+    .alert {
+      padding: 10px 14px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+      font-size: 0.9em;
+    }
+    .alert.success { background: #e6f7ed; color: #1a7d3c; border: 1px solid #a3d9b1; }
+    .alert.error { background: #fdecea; color: #b71c1c; border: 1px solid #f5a3a3; }
+    .hidden { display: none; }
+
+    .form-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .form-row input {
+      flex: 1;
+      min-width: 200px;
+      padding: 8px 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-size: 0.9em;
+      font-family: inherit;
+    }
+    .form-row input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }
+
+    button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 0.9em;
+      font-family: inherit;
+      font-weight: 500;
+    }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-danger { background: #dc2626; color: #fff; padding: 4px 10px; font-size: 0.82em; }
+    .btn-danger:hover { background: #b91c1c; }
+
+    .hint { font-size: 0.82em; color: #777; margin-top: 6px; }
+    .hint code { background: #e8e8e8; padding: 1px 4px; border-radius: 3px; font-size: 0.95em; }
+
+    section { background: #fff; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eee; font-size: 0.9em; }
+    th { font-weight: 600; color: #555; font-size: 0.82em; text-transform: uppercase; letter-spacing: 0.5px; }
+    .col-num { width: 40px; }
+    .col-label { width: 180px; }
+    .col-action { width: 70px; text-align: center; }
+    td.col-action { text-align: center; }
+    .col-id code { font-size: 0.85em; background: #f8f8f8; padding: 1px 4px; border-radius: 3px; word-break: break-all; }
+
+    .empty {
+      text-align: center;
+      padding: 30px;
+      color: #999;
+      font-size: 0.9em;
+    }
+    .loading { text-align: center; padding: 20px; color: #999; }
+
+    footer { margin-top: 10px; }
+    .note { font-size: 0.8em; color: #888; margin-bottom: 4px; }
+
+    @media (max-width: 600px) {
+      body { padding: 10px; }
+      section { padding: 12px; }
+      .form-row input { min-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>Konfigurasi Spreadsheet Manifest Bulanan</h1>
+
+  <div id="alert" class="alert hidden"></div>
+
+  <section>
+    <h2>Tambah Spreadsheet</h2>
+    <form id="add-form" autocomplete="off">
+      <div class="form-row">
+        <input type="text" id="input-id" placeholder="Spreadsheet ID (wajib)" required>
+        <input type="text" id="input-label" placeholder="Label, contoh: Mei 2026">
+        <button type="submit" class="btn-primary">Tambah</button>
+      </div>
+    </form>
+    <p class="hint">
+      Spreadsheet ID adalah nilai panjang dari URL Google Sheets
+      (<code>docs.google.com/spreadsheets/d/<b>ID</b>/edit</code>)
+    </p>
+  </section>
+
+  <section>
+    <h2>Daftar Spreadsheet</h2>
+    <div id="loading" class="loading">Memuat...</div>
+    <div id="empty-state" class="empty hidden">
+      Belum ada spreadsheet tersimpan. Pipeline akan membaca
+      <code>SPREADSHEET_MONTHLY_IDS</code> dari <code>.env</code> sebagai fallback.
+    </div>
+    <table id="sheet-table" class="hidden">
+      <thead>
+        <tr>
+          <th class="col-num">#</th>
+          <th class="col-id">Spreadsheet ID</th>
+          <th class="col-label">Label</th>
+          <th class="col-action">Hapus</th>
+        </tr>
+      </thead>
+      <tbody id="sheet-tbody"></tbody>
+    </table>
+  </section>
+
+  <footer>
+    <p class="note">
+      Spreadsheet yang disimpan akan digunakan oleh pipeline harian (urut dari atas ke bawah,
+      bulan terdekat ke terjauh). Kosongkan daftar untuk kembali ke konfigurasi <code>.env</code>.
+    </p>
+  </footer>
+</div>
+
+<script>
+(function() {
+  var API = '/api/spreadsheet-ids';
+  var alertEl = document.getElementById('alert');
+  var loadingEl = document.getElementById('loading');
+  var emptyEl = document.getElementById('empty-state');
+  var tableEl = document.getElementById('sheet-table');
+  var tbodyEl = document.getElementById('sheet-tbody');
+  var formEl = document.getElementById('add-form');
+  var inputId = document.getElementById('input-id');
+  var inputLabel = document.getElementById('input-label');
+
+  function showAlert(msg, type) {
+    alertEl.textContent = msg;
+    alertEl.className = 'alert ' + type;
+    clearTimeout(alertEl._timer);
+    alertEl._timer = setTimeout(function() { alertEl.className = 'alert hidden'; }, 4000);
+  }
+
+  function renderTable(items) {
+    loadingEl.classList.add('hidden');
+    if (!items || items.length === 0) {
+      emptyEl.classList.remove('hidden');
+      tableEl.classList.add('hidden');
+      return;
+    }
+    emptyEl.classList.add('hidden');
+    tableEl.classList.remove('hidden');
+    tbodyEl.innerHTML = '';
+    items.forEach(function(item, i) {
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + (i + 1) + '</td>' +
+        '<td class="col-id"><code>' + esc(item.id) + '</code></td>' +
+        '<td>' + esc(item.label || '---') + '</td>' +
+        '<td class="col-action"><button class="btn-danger" data-id="' + escAttr(item.id) + '">Hapus</button></td>';
+      tbodyEl.appendChild(tr);
+    });
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function escAttr(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  }
+
+  function fetchIds() {
+    return fetch(API).then(function(r) { return r.json(); }).then(function(j) { return j.data; });
+  }
+
+  function loadData() {
+    loadingEl.classList.remove('hidden');
+    fetchIds()
+      .then(function(items) { renderTable(items); })
+      .catch(function(err) { showAlert('Gagal memuat: ' + err.message, 'error'); loadingEl.classList.add('hidden'); });
+  }
+
+  formEl.addEventListener('submit', function(e) {
+    e.preventDefault();
+    var id = inputId.value.trim();
+    var label = inputLabel.value.trim();
+    if (!id) return showAlert('Spreadsheet ID wajib diisi', 'error');
+
+    fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: id, label: label })
+    }).then(function(r) { return r.json(); })
+      .then(function(j) {
+        if (j.error) throw new Error(j.error);
+        renderTable(j.data);
+        inputId.value = '';
+        inputLabel.value = '';
+        inputId.focus();
+        showAlert('Spreadsheet ditambahkan', 'success');
+      })
+      .catch(function(err) { showAlert(err.message, 'error'); });
+  });
+
+  tbodyEl.addEventListener('click', function(e) {
+    var btn = e.target.closest('.btn-danger');
+    if (!btn) return;
+    var id = btn.getAttribute('data-id');
+    if (!confirm('Hapus spreadsheet ini?')) return;
+
+    fetch(API, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: id })
+    }).then(function(r) { return r.json(); })
+      .then(function(j) {
+        if (j.error) throw new Error(j.error);
+        renderTable(j.data);
+        showAlert('Spreadsheet dihapus', 'success');
+      })
+      .catch(function(err) { showAlert(err.message, 'error'); });
+  });
+
+  document.addEventListener('DOMContentLoaded', loadData);
+})();
+</script>
+</body>
+</html>

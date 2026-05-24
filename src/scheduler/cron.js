@@ -13,9 +13,6 @@ export function startScheduler() {
 
   job = cron.schedule(
     expression,
-    {
-      timezone: config.tz,
-    },
     async () => {
       logger.info('[scheduler] trigger: starting daily report');
       try {
@@ -24,7 +21,8 @@ export function startScheduler() {
       } catch (error) {
         logger.error(`[scheduler] daily report crashed: ${error.message}`);
       }
-    }
+    },
+    { timezone: config.tz },
   );
 
   logger.info('[scheduler] started');

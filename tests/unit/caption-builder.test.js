@@ -13,15 +13,20 @@ describe('CaptionBuilder', () => {
     sisaSeat: 10,
   };
 
-  describe('Skenario 1: Normal — ada jamaah baru', () => {
-    it('menampilkan daftar nama jamaah baru', () => {
+  describe('Skenario 1: Normal — ada jamaah baru (grouped)', () => {
+    it('menampilkan leader + pax untuk grup jamaah baru', () => {
       const builder = new CaptionBuilder();
       const result = builder.build({
         packageData: basePackageData,
-        newJamaahList: ['Andi Pratama', 'Budi Santoso', 'Cici Amelia'],
-        pindahanList: [],
+        newJamaahGroups: [
+          { leader: 'Andi Pratama', pax: 1 },
+          { leader: 'Budi Santoso', pax: 3 },
+        ],
+        pindahanGroups: [],
+        newCount: 4,
+        pindahanCount: 0,
         keluarList: [],
-        isFirstRun: false,
+
         lastSnapshotDate: null,
         currentDate: new Date('2026-06-15'),
       });
@@ -30,56 +35,59 @@ describe('CaptionBuilder', () => {
       expect(result).toContain('Garuda Indonesia');
       expect(result).toContain('Jakarta - Jeddah');
       expect(result).toContain('Total Jamaah: 20/30 seat');
-      expect(result).toContain('Jamaah Baru Hari Ini: 3 orang');
-      expect(result).toContain('Andi Pratama');
-      expect(result).toContain('Budi Santoso');
-      expect(result).toContain('Cici Amelia');
+      expect(result).toContain('Jamaah Baru Hari Ini: 4 orang');
+      expect(result).toContain('❯ Andi Pratama');
+      expect(result).toContain('❯ Budi Santoso + 3 pax');
       expect(result).toContain('Sisa Seat: 10');
     });
   });
 
   describe('Skenario 2: Tidak ada perubahan', () => {
-    it('menampilkan tidak ada jamaah baru', () => {
+    it('tidak menampilkan baris jamaah baru', () => {
       const builder = new CaptionBuilder();
       const result = builder.build({
         packageData: basePackageData,
-        newJamaahList: [],
-        pindahanList: [],
+        newJamaahGroups: [],
+        pindahanGroups: [],
+        newCount: 0,
+        pindahanCount: 0,
         keluarList: [],
-        isFirstRun: false,
+
         lastSnapshotDate: null,
         currentDate: new Date('2026-06-15'),
       });
 
       expect(result).toContain('PAKET UMROH A');
-      expect(result).toContain('Jamaah Baru Hari Ini: - (tidak ada)');
+      expect(result).not.toContain('Jamaah Baru Hari Ini');
       expect(result).toContain('Total Jamaah: 20/30 seat');
     });
   });
 
   describe('Skenario 3: Hanya perpindahan', () => {
-    it('menampilkan section perpindahan saja', () => {
+    it('menampilkan section perpindahan dengan grup', () => {
       const builder = new CaptionBuilder();
       const result = builder.build({
         packageData: basePackageData,
-        newJamaahList: [],
-        pindahanList: [
-          { nama: 'Dewi Lestari', dariPaket: 'PAKET UMROH B' },
-          { nama: 'Eko Prasetyo', dariPaket: 'PAKET UMROH C' },
+        newJamaahGroups: [],
+        pindahanGroups: [
+          { leader: 'Dewi Lestari', pax: 2, dariPaket: 'PAKET UMROH B' },
+          { leader: 'Eko Prasetyo', pax: 1, dariPaket: 'PAKET UMROH C' },
         ],
+        newCount: 0,
+        pindahanCount: 3,
         keluarList: [],
-        isFirstRun: false,
+
         lastSnapshotDate: null,
         currentDate: new Date('2026-06-15'),
       });
 
       expect(result).toContain('PAKET UMROH A');
+      expect(result).toContain('Jamaah Baru Hari Ini: 3 orang');
+      expect(result).toContain('❯ Dewi Lestari + 2 pax');
+      expect(result).toContain('❯ Eko Prasetyo');
       expect(result).toContain('Perpindahan Jamaah');
-      expect(result).toContain('Dewi Lestari');
       expect(result).toContain('dari PAKET UMROH B');
-      expect(result).toContain('Eko Prasetyo');
       expect(result).toContain('dari PAKET UMROH C');
-      expect(result).toContain('Jamaah Baru Hari Ini: - (tidak ada)');
     });
   });
 
@@ -88,54 +96,41 @@ describe('CaptionBuilder', () => {
       const builder = new CaptionBuilder();
       const result = builder.build({
         packageData: basePackageData,
-        newJamaahList: ['Fajar Hidayat'],
-        pindahanList: [
-          { nama: 'Gita Permata', dariPaket: 'PAKET UMROH D' },
+        newJamaahGroups: [
+          { leader: 'Fajar Hidayat', pax: 1 },
         ],
+        pindahanGroups: [
+          { leader: 'Gita Permata', pax: 1, dariPaket: 'PAKET UMROH D' },
+        ],
+        newCount: 1,
+        pindahanCount: 1,
         keluarList: [],
-        isFirstRun: false,
+
         lastSnapshotDate: null,
         currentDate: new Date('2026-06-15'),
       });
 
-      expect(result).toContain('Fajar Hidayat');
-      expect(result).toContain('Gita Permata');
+      expect(result).toContain('❯ Fajar Hidayat');
+      expect(result).toContain('❯ Gita Permata');
       expect(result).toContain('dari PAKET UMROH D');
       expect(result).toContain('Jamaah Baru Hari Ini: 2 orang');
       expect(result).toContain('Perpindahan Jamaah');
     });
   });
 
-  describe('Skenario 5: First run', () => {
-    it('semua jamaah dianggap baru dengan catatan first run', () => {
-      const builder = new CaptionBuilder();
-      const result = builder.build({
-        packageData: { ...basePackageData, totalJamaah: 25 },
-        newJamaahList: ['Hendra Gunawan', 'Indah Wahyuni', 'Joko Susilo', 'Kartika Sari'],
-        pindahanList: [],
-        keluarList: [],
-        isFirstRun: true,
-        lastSnapshotDate: null,
-        currentDate: new Date('2026-06-15'),
-      });
-
-      expect(result).toContain('Pertama Kali');
-      expect(result).toContain('Jamaah Baru Hari Ini: 4 orang');
-      expect(result).toContain('Hendra Gunawan');
-      expect(result).toContain('Indah Wahyuni');
-      expect(result).toContain('Kartika Sari');
-    });
-  });
-
-  describe('Skenario 6: Snapshot gap > 1 hari', () => {
+  describe('Skenario 5: Snapshot gap > 1 hari', () => {
     it('menampilkan catatan sejak tanggal X', () => {
       const builder = new CaptionBuilder();
       const result = builder.build({
         packageData: basePackageData,
-        newJamaahList: ['Lina Marlina'],
-        pindahanList: [],
+        newJamaahGroups: [
+          { leader: 'Lina Marlina', pax: 1 },
+        ],
+        pindahanGroups: [],
+        newCount: 1,
+        pindahanCount: 0,
         keluarList: [],
-        isFirstRun: false,
+
         lastSnapshotDate: '2026-06-10',
         currentDate: new Date('2026-06-15'),
       });
@@ -150,10 +145,12 @@ describe('CaptionBuilder', () => {
       const builder = new CaptionBuilder();
       const result = builder.build({
         packageData: { ...basePackageData, totalJamaah: 0, sisaSeat: 30 },
-        newJamaahList: [],
-        pindahanList: [],
+        newJamaahGroups: [],
+        pindahanGroups: [],
+        newCount: 0,
+        pindahanCount: 0,
         keluarList: [],
-        isFirstRun: false,
+
         lastSnapshotDate: null,
         currentDate: new Date('2026-06-15'),
       });
@@ -169,10 +166,12 @@ describe('CaptionBuilder', () => {
       const builder = new CaptionBuilder();
       const result = builder.build({
         packageData: basePackageData,
-        newJamaahList: [],
-        pindahanList: [],
+        newJamaahGroups: [],
+        pindahanGroups: [],
+        newCount: 0,
+        pindahanCount: 0,
         keluarList: ['Mulyono', 'Nina Zainab'],
-        isFirstRun: false,
+
         lastSnapshotDate: null,
         currentDate: new Date('2026-06-15'),
       });
@@ -188,25 +187,33 @@ describe('CaptionBuilder', () => {
       const builder = new CaptionBuilder();
       const result = builder.build({
         packageData: basePackageData,
-        newJamaahList: null,
-        pindahanList: undefined,
+        newJamaahGroups: null,
+        pindahanGroups: undefined,
+        newCount: 0,
+        pindahanCount: 0,
         keluarList: null,
-        isFirstRun: false,
+
         lastSnapshotDate: null,
         currentDate: new Date('2026-06-15'),
       });
 
-      expect(result).toContain('Jamaah Baru Hari Ini: - (tidak ada)');
+      expect(result).not.toContain('Jamaah Baru Hari Ini');
     });
 
     it('menampilkan kombinasi baru, pindahan, dan keluar', () => {
       const builder = new CaptionBuilder();
       const result = builder.build({
         packageData: basePackageData,
-        newJamaahList: ['Oscar'],
-        pindahanList: [{ nama: 'Puji', dariPaket: 'PAKET E' }],
+        newJamaahGroups: [
+          { leader: 'Oscar', pax: 1 },
+        ],
+        pindahanGroups: [
+          { leader: 'Puji', pax: 1, dariPaket: 'PAKET E' },
+        ],
+        newCount: 1,
+        pindahanCount: 1,
         keluarList: ['Qori'],
-        isFirstRun: false,
+
         lastSnapshotDate: null,
         currentDate: new Date('2026-06-15'),
       });

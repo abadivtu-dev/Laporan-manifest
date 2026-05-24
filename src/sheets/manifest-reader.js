@@ -168,10 +168,19 @@ function _combinePakets(rekapList, blocks) {
     }
 
     if (matchedBlock) {
+      // Fallback unique kodePaket: gunakan "1A{N}" marker untuk paket tanpa ID
+      const fallbackKode = `PAKET-${rekap.no}`;
+      let kodePaket = rekap.kodePaket || matchedBlock.metadata.kodePaket || '';
+      if (!kodePaket || kodePaket === '(ID.DETAIL FLIGHT)') {
+        const marker = (matchedBlock.seatInfoRow && matchedBlock.seatInfoRow[2])
+          ? matchedBlock.seatInfoRow[2].toString().trim()
+          : '';
+        kodePaket = marker || fallbackKode;
+      }
+
       combined.push({
         metadata: {
-          // Prioritaskan DATA REKAP PAKET untuk metadata
-          kodePaket: rekap.kodePaket || matchedBlock.metadata.kodePaket,
+          kodePaket,
           namaPaket: rekap.namaPaket || matchedBlock.metadata.namaPaket,
           programPaket: rekap.programPaket || matchedBlock.metadata.rute || '',
           rute: matchedBlock.metadata.rute || rekap.programPaket || '',
@@ -191,31 +200,8 @@ function _combinePakets(rekapList, blocks) {
         descRows: matchedBlock.descRows || [],
         rawRows: matchedBlock.rawRows || [],
       });
-    } else {
-      // Paket tidak punya data di DATA JAMAAH — tetap masuk dengan jamaah kosong
-      combined.push({
-        metadata: {
-          kodePaket: rekap.kodePaket,
-          namaPaket: rekap.namaPaket || `Paket #${rekap.no}`,
-          programPaket: rekap.programPaket || '',
-          rute: '',
-          jumlahSeat: rekap.jumlahSeat,
-          seatTerisi: rekap.seatTerisi,
-          sisaSeat: rekap.sisaSeat,
-          tanggalKeberangkatan: rekap.tanggalKeberangkatan,
-          noManifest: rekap.noManifest,
-          maskapai: '',
-          asal: '',
-          tujuan: '',
-        },
-        jamaah: [],
-        columnHeaders: [],
-        summary: null,
-        seatInfoRow: [],
-        descRows: [],
-        rawRows: [],
-      });
     }
+    // Paket tanpa data di DATA JAMAAH tidak dimasukkan
   }
 
   // Sort by departure date (terdekat ke terjauh)

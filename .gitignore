@@ -10,3 +10,7 @@ playwright-report/
 test-results/
 screenshots-debug/
 *.log
+service-account.json
+qr-code.png
+sample-*.*
+group-list.txt

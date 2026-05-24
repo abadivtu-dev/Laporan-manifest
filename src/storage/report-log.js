@@ -14,10 +14,23 @@ import { getDatabase } from './database.js';
 export async function logSentReport({ spreadsheetId, paketCode, reportDate, waMessageId, status = 'sent' }) {
   try {
     const db = getDatabase();
-    db.prepare(`
-      INSERT INTO sent_reports (spreadsheet_id, paket_code, report_date, wa_message_id, status)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(spreadsheetId, paketCode, reportDate, waMessageId || null, status);
+    const existing = db.prepare(`
+      SELECT id FROM sent_reports
+      WHERE spreadsheet_id = ? AND paket_code = ? AND report_date = ?
+    `).get(spreadsheetId, paketCode, reportDate);
+
+    if (existing) {
+      db.prepare(`
+        UPDATE sent_reports
+        SET wa_message_id = ?, status = ?, last_error = NULL, attempts = attempts + 1, sent_at = datetime('now','localtime')
+        WHERE id = ?
+      `).run(waMessageId || null, status, existing.id);
+    } else {
+      db.prepare(`
+        INSERT INTO sent_reports (spreadsheet_id, paket_code, report_date, wa_message_id, status)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(spreadsheetId, paketCode, reportDate, waMessageId || null, status);
+    }
 
     const row = db.prepare(`
       SELECT * FROM sent_reports
@@ -38,14 +51,19 @@ export async function logSentReport({ spreadsheetId, paketCode, reportDate, waMe
  * @param {string} reportDate - Format YYYY-MM-DD
  * @returns {Promise<boolean>}
  */
-export async function isAlreadySent(spreadsheetId, paketCode, reportDate) {
+export async function isAlreadySent(spreadsheetId, paketCode, reportDate, status = null) {
   try {
     const db = getDatabase();
-    const row = db.prepare(`
-      SELECT COUNT(*) as count FROM sent_reports
-      WHERE spreadsheet_id = ? AND paket_code = ? AND report_date = ?
-    `).get(spreadsheetId, paketCode, reportDate);
+    let query = `SELECT COUNT(*) as count FROM sent_reports
+      WHERE spreadsheet_id = ? AND paket_code = ? AND report_date = ?`;
+    const params = [spreadsheetId, paketCode, reportDate];
 
+    if (status) {
+      query += ` AND status = ?`;
+      params.push(status);
+    }
+
+    const row = db.prepare(query).get(...params);
     return row.count > 0;
   } catch (error) {
     throw new Error(`Gagal isAlreadySent ${spreadsheetId}/${paketCode}/${reportDate}: ${error.message}`, { cause: error });
