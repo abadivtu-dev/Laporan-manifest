@@ -7,7 +7,18 @@ import { logger } from '../utils/logger.js';
 
 // ── Telegram API helper (zero-dependency, built-in https) ────────────────────
 
-function telegramApi(method, body) {
+/**
+ * Call Telegram Bot API.
+ *
+ * Socket timeout must exceed the long-polling timeout (30 s) so the socket
+ * never fires before the API responds.  65 s gives headroom for latency.
+ *
+ * @param {string} method        — Telegram method name (e.g. "getUpdates")
+ * @param {object} body          — JSON body
+ * @param {number} [timeoutMs]   — socket timeout in ms (default 65_000)
+ * @returns {Promise<object>}    — parsed `result` field from the Telegram response
+ */
+function telegramApi(method, body, timeoutMs = 65_000) {
   const token = config.telegramBotToken;
   if (!token) return Promise.reject(new Error('TELEGRAM_BOT_TOKEN not configured'));
 
@@ -22,7 +33,7 @@ function telegramApi(method, body) {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(payload),
         },
-        timeout: 30000,
+        timeout: timeoutMs,
       },
       (res) => {
         let data = '';
@@ -31,7 +42,9 @@ function telegramApi(method, body) {
           try {
             const json = JSON.parse(data);
             if (!json.ok) {
-              reject(new Error(`Telegram API error: ${json.description || data}`));
+              const err = new Error(`Telegram API error: ${json.description || data}`);
+              err.code = json.error_code;
+              reject(err);
             } else {
               resolve(json.result);
             }
@@ -42,7 +55,10 @@ function telegramApi(method, body) {
       },
     );
     req.on('error', reject);
-    req.on('timeout', () => { req.destroy(); reject(new Error('Telegram API timeout')); });
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Telegram API socket timeout'));
+    });
     req.write(payload);
     req.end();
   });
@@ -243,7 +259,22 @@ function todayDate() {
   return new Date().toLocaleDateString('en-CA', { timeZone: config.tz });
 }
 
+/**
+ * Detect whether an error is a "normal" long-polling result, not a real failure.
+ *
+ * Telegram `getUpdates` with `timeout=30` returns an empty `[]` after ~30 s of
+ * idleness.  That is expected — the socket timeout in `telegramApi` is 65 s, so
+ * it should never win the race.  If a socket timeout DOES happen it means the
+ * network dropped the connection, which we treat as a real error.
+ */
+function _isPollingTimeout(err) {
+  const msg = (err.message || '').toLowerCase();
+  return msg.includes('socket timeout') || msg.includes('telegram api timeout');
+}
+
 // ── Long polling engine ──────────────────────────────────────────────────────
+
+const POLL_LONGPOLL_SECS = 30;     // Telegram long-poll timeout (seconds)
 
 let offset = 0;
 let polling = false;
@@ -253,11 +284,17 @@ async function poll() {
   if (!polling) return;
 
   try {
-    const updates = await telegramApi('getUpdates', {
-      offset,
-      timeout: 30,
-      allowed_updates: ['message', 'callback_query'],
-    });
+    // Socket timeout = 65 s, well above the 30 s long-poll so the socket
+    // never races the API response.
+    const updates = await telegramApi(
+      'getUpdates',
+      {
+        offset,
+        timeout: POLL_LONGPOLL_SECS,
+        allowed_updates: ['message', 'callback_query'],
+      },
+      65_000,    // socket timeout — must be > long-poll timeout
+    );
 
     if (updates && updates.length > 0) {
       for (const update of updates) {
@@ -265,13 +302,20 @@ async function poll() {
         await handleUpdate(update);
       }
     }
+    // Empty result after long-poll timeout is normal — just loop again.
   } catch (err) {
-    logger.error({ err }, '[telegram] poll error');
+    // Real network errors should still be logged; socket timeouts that are
+    // NOT from the long-poll expiry are rare but possible (ISP hiccup, etc.)
+    if (_isPollingTimeout(err)) {
+      logger.warn('[telegram] long-poll socket timeout — reconnecting');
+    } else {
+      logger.error({ err }, '[telegram] poll error');
+    }
   }
 
   if (polling) {
-    // brief delay between polls to avoid hammering
-    pollTimer = setTimeout(poll, 500);
+    // Brief delay between polls so we don't hammer the API
+    pollTimer = setTimeout(poll, 200);
   }
 }
 
@@ -351,7 +395,7 @@ export async function startTelegramBot() {
 
   // Dapatkan offset terbaru supaya skip message lama
   try {
-    const updates = await telegramApi('getUpdates', { offset: -1, limit: 1 });
+    const updates = await telegramApi('getUpdates', { offset: -1, limit: 1 }, 10_000);
     if (updates && updates.length > 0) {
       offset = updates[0].update_id + 1;
     }
@@ -363,7 +407,7 @@ export async function startTelegramBot() {
   poll();
 
   try {
-    const me = await telegramApi('getMe');
+    const me = await telegramApi('getMe', {}, 10_000);
     logger.info(`[telegram] bot @${me.username} started — listening for commands`);
   } catch {
     logger.info('[telegram] bot started — listening for commands');
