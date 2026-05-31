@@ -93,8 +93,8 @@ export function startAdminServer(port) {
     }
   });
 
-  server.listen(port, '127.0.0.1', () => {
-    logger.info(`[admin] web UI tersedia di http://127.0.0.1:${port}`);
+  server.listen(port, '0.0.0.0', () => {
+    logger.info(`[admin] web UI tersedia di http://0.0.0.0:${port}`);
   });
 
   return server;
