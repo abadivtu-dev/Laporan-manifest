@@ -275,17 +275,38 @@ function _isPollingTimeout(err) {
 // ── Long polling engine ──────────────────────────────────────────────────────
 
 const POLL_LONGPOLL_SECS = 30;     // Telegram long-poll timeout (seconds)
+const POLL_RECONNECT_MS = 500;     // normal delay between polls
+const POLL_CONFLICT_WAIT_MS = 10_000; // wait after 409 Conflict
 
 let offset = 0;
 let polling = false;
 let pollTimer = null;
+let pollInFlight = false;           // guard against concurrent polls
+
+/**
+ * Schedule the next poll cycle, cancelling any previously scheduled timer.
+ * Must be called while NOT inside an in-flight poll (unless the guard is off).
+ */
+function _scheduleNextPoll(delayMs = POLL_RECONNECT_MS) {
+  if (pollTimer) {
+    clearTimeout(pollTimer);
+    pollTimer = null;
+  }
+  if (!polling) return;
+  pollTimer = setTimeout(poll, delayMs);
+}
 
 async function poll() {
+  // Guard: never run two polls concurrently (belt-and-suspenders with the
+  // timer cancel above — handles edge cases where poll() is called externally)
   if (!polling) return;
+  if (pollInFlight) {
+    logger.warn('[telegram] poll already in flight, skipping duplicate');
+    return;
+  }
+  pollInFlight = true;
 
   try {
-    // Socket timeout = 65 s, well above the 30 s long-poll so the socket
-    // never races the API response.
     const updates = await telegramApi(
       'getUpdates',
       {
@@ -302,20 +323,26 @@ async function poll() {
         await handleUpdate(update);
       }
     }
-    // Empty result after long-poll timeout is normal — just loop again.
+    // Empty result after long-poll timeout is normal — just loop again
+    _scheduleNextPoll(POLL_RECONNECT_MS);
   } catch (err) {
-    // Real network errors should still be logged; socket timeouts that are
-    // NOT from the long-poll expiry are rare but possible (ISP hiccup, etc.)
-    if (_isPollingTimeout(err)) {
+    const code = err.code || 0;
+
+    if (code === 409) {
+      // Another getUpdates is still active — Telegram terminated it.
+      // Delete any lingering webhook, wait, then retry.
+      logger.warn('[telegram] 409 conflict — clearing webhook and retrying in 10s');
+      try { await telegramApi('deleteWebhook', { drop_pending_updates: true }, 10_000); } catch {}
+      _scheduleNextPoll(POLL_CONFLICT_WAIT_MS);
+    } else if (_isPollingTimeout(err)) {
       logger.warn('[telegram] long-poll socket timeout — reconnecting');
+      _scheduleNextPoll(POLL_RECONNECT_MS);
     } else {
       logger.error({ err }, '[telegram] poll error');
+      _scheduleNextPoll(5_000);  // back off on unknown errors
     }
-  }
-
-  if (polling) {
-    // Brief delay between polls so we don't hammer the API
-    pollTimer = setTimeout(poll, 200);
+  } finally {
+    pollInFlight = false;
   }
 }
 
@@ -416,6 +443,7 @@ export async function startTelegramBot() {
 
 export function stopTelegramBot() {
   polling = false;
+  pollInFlight = false;
   if (pollTimer) {
     clearTimeout(pollTimer);
     pollTimer = null;
